@@ -300,7 +300,7 @@ function enter(s){
     case "loaf": cat.dur = rnd(5,10) + (1-P.energy)*11; say("purr", .3*talk); break;
     case "sleep": cat.dur = rnd(12,20) + (1-P.energy)*22; break;
     case "groom": cat.dur = rnd(3.5,6); break;
-    case "stretch": cat.dur = 1.6; break;
+    case "stretch": cat.dur = 2.6; break;
     case "approach_icon":
       cat.icon = ICONS[Math.floor(Math.random()*ICONS.length)];
       cat.target = {x: cat.icon.x - 70, y: cat.icon.y + 62}; cat.dur = 25; break;
@@ -587,7 +587,7 @@ function pose(){
     tailAngle:.45,tailWave:Math.sin(now/1150)*.34,tailWhip:0,legPhase:0,dy:0,lean:0,
     headDx:0,headDy:0,headTilt:0,pdx:0,pdy:0,paw:0,hang:0,crouch:0,squash:0,air:0,
     breathe:Math.sin(now/450)*1.2,squint:0,happy:0,tongue:0,curl:0,roll:0,whisk:0,
-    turnIn:0,flat:0,sideSleep:0,mouthOpen:0,faceFront:0,onBack:0,gallop:0,stretchBody:0,pawUp:0,
+    turnIn:0,flat:0,sideSleep:0,mouthOpen:0,faceFront:0,onBack:0,gallop:0,stretchBody:0,pawUp:0,stretchDown:0,
     tailTip:Math.sin(now/520)*.1};
   const s = cat.state, t = cat.t;
 
@@ -617,8 +617,14 @@ function pose(){
     q.tailAngle = .05;
   }
   else if (s === "stretch") {
-    q.sag = Math.sin(clamp(t/cat.dur,0,1)*Math.PI);
-    q.tailAngle = .95; q.eyeOpen = .3; q.squint = .4;
+    // потягивание по фото: передние лапы вытянуты вперёд по земле, грудь у пола,
+    // зад высоко, хвост трубой, глаза прижмурены от удовольствия
+    const p = clamp(t/cat.dur,0,1);
+    const sd = Math.min(1, Math.sin(p*Math.PI)*1.5);
+    q.stretchDown = sd; q.arch = 0; q.legPhase = 0;
+    q.tailAngle = .5 + .5*sd; q.tailTip = .2*sd;
+    q.eyeOpen = 1 - .8*sd; q.squint = .5*sd; q.happy = sd > .5 ? 1 : 0;
+    q.headDy = 3*sd; q.headTilt = .22*sd; q.breathe = Math.sin(now/700)*1.2;
   }
   else if (s === "paw_icon") {
     // замах: плавно поднимает лапу и так же плавно опускает, потом короткая пауза
@@ -883,15 +889,18 @@ function geom(q){
   if (q.onBack) { length *= 1.14; height *= .94; }
   if (q.stretchBody) { length *= 1.18; height *= .90; }
   height *= 1 - q.squash*.16;
+  const sd = q.stretchDown || 0;
+  if (sd) length *= 1 + .14*sd;
   const legK = {short: .55, normal: 1, long: 1.28}[CAT.legs] ?? 1;
   const leg = Math.max(0, 14.5*legK*(1-loaf)*(1-q.crouch*.55)*(1-q.squash*.45) + q.air*3);
-  const byF = -leg, byR = -leg + sit*(leg-3);
+  const byF = -leg*(1 - .88*sd), byR = -leg*(1 + .45*sd) + sit*(leg-3);
   return {rear:-length*.55, front:length*.45, byR, byF,
-          tyF: byF - height + q.sag*5, tyR: byR - height*.95 - arch*5 - dome,
-          height, arch, sit, loaf};
+          tyF: byF - height*(1 - .32*sd) + q.sag*5,
+          tyR: byR - height*.95*(1 + .28*sd) - arch*5 - dome,
+          height, arch, sit, loaf, sd};
 }
 function bodyPath(g){
-  const backY = lerp(g.tyR, g.tyF, .45) - g.arch*11;
+  const backY = lerp(g.tyR, g.tyF, .45) - g.arch*11 + (g.sd || 0)*7;
   ctx.beginPath();
   ctx.moveTo(g.rear+2, g.byR);
   ctx.quadraticCurveTo(g.rear-9, lerp(g.byR,g.tyR,.45), g.rear-3, g.tyR + g.height*.10);
@@ -1002,8 +1011,9 @@ function drawCat(q){
                               : Math.sin(legAt(i, true))*swing;
   const liftOf = (i, front) => bound ? 0 : Math.max(0, Math.cos(legAt(i, front)))*3.6;
   if (g.loaf < .5 && g.sit < .5) {
-    drawLeg(g.rear+13, g.byR, hindOff(0) - q.air*6, liftOf(0, false));
-    drawLeg(g.rear+23, g.byR, hindOff(1) - q.air*9, liftOf(1, false));
+    const sd = q.stretchDown;
+    drawLeg(g.rear+13, g.byR, hindOff(0)*(1-sd) - q.air*6 - sd*2, liftOf(0, false)*(1-sd));
+    drawLeg(g.rear+23, g.byR, hindOff(1)*(1-sd) - q.air*9 + sd*1, liftOf(1, false)*(1-sd));
   } else if (g.loaf < .5) {
     ctx.fillStyle = CAT.base; ctx.strokeStyle = INK; ctx.lineWidth = LW*.55;
     ctx.beginPath(); ctx.ellipse(g.rear+17, -3, 11.5, 4, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
@@ -1091,10 +1101,11 @@ function drawCat(q){
 
   // передние лапы / буханка / висение
   if (g.loaf < .5) {
-    drawLeg(g.front-19, g.byF, frontOff(0) + q.air*7, liftOf(0, true));
+    const sdF = q.stretchDown;
+    drawLeg(g.front-19, g.byF, frontOff(0)*(1-sdF) + q.air*7 + sdF*62, liftOf(0, true)*(1-sdF));
     // при умывании одну переднюю лапу кот держит у морды — на земле остаётся одна
     if (!["groom","paw_icon"].includes(cat.state))
-      drawLeg(g.front-9, g.byF, frontOff(1) + q.air*11, liftOf(1, true));
+      drawLeg(g.front-9, g.byF, frontOff(1)*(1-sdF) + q.air*11 + sdF*68, liftOf(1, true)*(1-sdF));
     if (q.paw > .05 && !["groom","paw_icon"].includes(cat.state)) {
       const px = g.front + 4 + 20*q.paw, py = g.byF - 6 - 18*q.paw;
       ctx.strokeStyle = CAT.base; ctx.lineWidth = 8; ctx.lineCap = "round";
