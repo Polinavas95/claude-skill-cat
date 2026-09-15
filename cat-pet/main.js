@@ -131,6 +131,7 @@ function buildMenu() {
     act("Буханка", "loaf"),
     act("Спать", "sleep"),
     act("Умываться", "groom"),
+    act("Потянуться", "stretch"),
     act("К курсору", "chase_cursor"),
     act("Испугать", "startle"),
     act("Берсерк", "berserk"),

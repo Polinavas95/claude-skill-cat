@@ -1,0 +1,35 @@
+{
+  "name": "Йога",
+  "sex": "female",
+  "language": "ru",
+  "appearance": {
+    "base_color": "#9c8a72",
+    "pattern": "mackerel",
+    "pattern_color": "#4f4033",
+    "belly_color": "#f5f2ec",
+    "eye_color": "#8fb88a",
+    "nose_color": "#d99a9a",
+    "fur": "short",
+    "ear_style": "normal",
+    "tail": "long",
+    "build": "normal",
+    "face": "round",
+    "extras": ["white_socks", "chest_spot", "white_muzzle"]
+  },
+  "personality": {
+    "energy": 0.55,
+    "curiosity": 0.6,
+    "boldness": 0.6,
+    "clinginess": 0.55,
+    "talkativeness": 0.4,
+    "loaf_bias": 0.5
+  },
+  "phrases": {
+    "meow": ["Мяу", "Мрр-мяу", "Мрм?"],
+    "purr": ["Мур-р-р", "Мррр"],
+    "scared": ["Ш-ш!"],
+    "annoyed": ["Мрм.", "Хм."],
+    "sleep": ["z-z-z"],
+    "eat": ["Хрум"]
+  }
+}

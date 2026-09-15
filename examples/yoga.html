@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__CAT_NAME__ — цифровой питомец</title>
+<title>Йога — цифровой питомец</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -37,7 +37,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1 id="title">__CAT_NAME__ — цифровой питомец</h1>
+  <h1 id="title">Йога — цифровой питомец</h1>
   <div class="sub">Наведите мышь на «рабочий стол»: кот следит за курсором, идёт к нему и цепляется. Клик по коту — погладить (иногда увернётся или сделает вид, что не заметил).</div>
   <div class="stage"><canvas id="stage" width="1720" height="1000"></canvas></div>
   <div class="bar">
@@ -67,7 +67,64 @@
   </div>
 </div>
 <script>
-const SPEC = __CAT_SPEC__;
+const SPEC = {
+  "name": "Йога",
+  "sex": "female",
+  "language": "ru",
+  "appearance": {
+    "base_color": "#9c8a72",
+    "pattern": "mackerel",
+    "pattern_color": "#4f4033",
+    "belly_color": "#f5f2ec",
+    "eye_color": "#8fb88a",
+    "nose_color": "#d99a9a",
+    "fur": "short",
+    "ear_style": "normal",
+    "tail": "long",
+    "build": "normal",
+    "face": "round",
+    "extras": [
+      "white_socks",
+      "chest_spot",
+      "white_muzzle"
+    ],
+    "leg_length": "normal"
+  },
+  "personality": {
+    "energy": 0.55,
+    "curiosity": 0.6,
+    "boldness": 0.6,
+    "clinginess": 0.55,
+    "talkativeness": 0.4,
+    "loaf_bias": 0.5
+  },
+  "phrases": {
+    "meow": [
+      "Мяу",
+      "Мрр-мяу",
+      "Мрм?"
+    ],
+    "purr": [
+      "Мур-р-р",
+      "Мррр"
+    ],
+    "scared": [
+      "Ш-ш!"
+    ],
+    "annoyed": [
+      "Мрм.",
+      "Хм."
+    ],
+    "sleep": [
+      "z-z-z"
+    ],
+    "eat": [
+      "Хрум"
+    ]
+  },
+  "scale": 1.0,
+  "speed_scale": 1.0
+};
 
 /* ---------- утилиты ---------- */
 function hex2rgb(h){h=String(h||"#999").replace("#","");if(h.length===3)h=h.split("").map(c=>c+c).join("");
