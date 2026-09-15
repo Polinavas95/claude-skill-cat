@@ -80,7 +80,7 @@ cv.addEventListener("mouseleave", () => { mouse.inside = false; mouseSpeed = 0; 
 });
 window.pet.onEnter(s => enter(s));
 cv.addEventListener("contextmenu", e => { e.preventDefault(); window.pet.menu(); });
-window.pet.onBowl(k => { if (!bowlOf(k)) spawnBowl(k); });
+window.pet.onBowl(k => toggleBowl(k));
 window.pet.onToy(() => toy ? removeToy() : spawnToy());
 window.pet.onResize(() => location.reload());
 const catHit = () => mouse.inside &&
