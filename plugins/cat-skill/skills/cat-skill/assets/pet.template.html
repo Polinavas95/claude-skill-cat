@@ -569,7 +569,7 @@ function pose(){
     q.stretchDown = sd; q.arch = 0; q.legPhase = 0;
     q.tailAngle = .5 + .5*sd; q.tailTip = .2*sd;
     q.eyeOpen = 1 - .8*sd; q.squint = .5*sd; q.happy = sd > .5 ? 1 : 0;
-    q.headDy = 3*sd; q.headTilt = .22*sd; q.breathe = Math.sin(now/700)*1.2;
+    q.headDy = 5*sd; q.headDx = -6*sd; q.headTilt = .26*sd; q.breathe = Math.sin(now/700)*1.2;
   }
   else if (s === "paw_icon") {
     // замах: плавно поднимает лапу и так же плавно опускает, потом короткая пауза
@@ -1047,10 +1047,10 @@ function drawCat(q){
   // передние лапы / буханка / висение
   if (g.loaf < .5) {
     const sdF = q.stretchDown;
-    drawLeg(g.front-19, g.byF, frontOff(0)*(1-sdF) + q.air*7 + sdF*62, liftOf(0, true)*(1-sdF));
+    drawLeg(g.front-19, g.byF, frontOff(0)*(1-sdF) + q.air*7 + sdF*40, liftOf(0, true)*(1-sdF));
     // при умывании одну переднюю лапу кот держит у морды — на земле остаётся одна
     if (!["groom","paw_icon"].includes(cat.state))
-      drawLeg(g.front-9, g.byF, frontOff(1)*(1-sdF) + q.air*11 + sdF*68, liftOf(1, true)*(1-sdF));
+      drawLeg(g.front-9, g.byF, frontOff(1)*(1-sdF) + q.air*11 + sdF*46, liftOf(1, true)*(1-sdF));
     if (q.paw > .05 && !["groom","paw_icon"].includes(cat.state)) {
       const px = g.front + 4 + 20*q.paw, py = g.byF - 6 - 18*q.paw;
       ctx.strokeStyle = CAT.base; ctx.lineWidth = 8; ctx.lineCap = "round";
