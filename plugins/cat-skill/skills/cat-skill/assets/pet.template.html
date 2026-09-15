@@ -122,6 +122,7 @@ const ICONS = [];
 for (let col=0; col<2; col++) for (let row=0; row<3; row++)
   ICONS.push({x: 90 + col*150, y: 150 + row*150, shake: 0});
 const WINDOW_RECT = {x: W*0.46, y: H*0.18, w: W*0.44, h: H*0.50};
+const BERSERK_WALLS = false;   // в берсерке отталкиваться от краёв и взлетать по дуге (включает оверлей)
 const STATE_RU = {idle:"стоит",walk:"гуляет",sit:"сидит",loaf:"буханка",sleep:"спит",
   groom:"умывается",stretch:"потягивается",approach_icon:"идёт к иконке",paw_icon:"трогает иконку",
   crouch:"приседает перед прыжком",jump_up:"в прыжке",land:"приземляется",sit_on_icon:"сидит на иконке",
@@ -257,7 +258,7 @@ const cat = {
   startleCd: 0, grabCd: 0, bowlCd: 14, calmReturn: "idle",
   earFlick: 0, blink: 0, blinkCd: 3, dodgeDir: 1,
   grip: 0, vy: 0, gripLocal: {x: 56, y: -61},
-  speedMul: 1, dash: null, offTimer: 0,
+  speedMul: 1, dash: null, offTimer: 0, wall: null,
   stroke: 0, strokeCd: 0, bowlSig: "",
   lookX: 0, lookY: 0, lookTarget: {x: 0, y: 0}, lookCd: 2, flickCd: 5,
   pets: 0, wakeGreet: false, toyCd: 30, playRounds: 0, playMax: 3, swipes: 0
@@ -337,7 +338,7 @@ function enter(s){
     case "sniff": cat.dur = rnd(1.2,2.2); break;
     case "purring": cat.dur = rnd(2.5,4); cat.pets = (cat.pets || 0) + 1; say("purr", .9); break;
     case "berserk":
-      cat.dur = rnd(4.5, 9); cat.dash = null; cat.offTimer = 0;
+      cat.dur = rnd(4.5, 9); cat.dash = null; cat.offTimer = 0; cat.wall = null;
       cat.speedMul = rnd(2.6, 3.6); say("meow", .9); break;
     case "catch_breath": cat.dur = rnd(1.8, 3); cat.speedMul = 1; break;
     case "startle": cat.dur = .45; say("scared", .7); break;
@@ -589,22 +590,39 @@ function update(dt){
   else if (s === "startle") { if (done) enter("calm_down"); }
   else if (s === "calm_down") { if (done) enter(cat.calmReturn); }
   else if (s === "berserk") {
-    if (cat.offTimer > 0) {
+    if (cat.wall) {
+      // «по стенам»: взбегает по краю экрана, отталкивается и летит по дуге обратно на пол
+      const wj = cat.wall; wj.t += dt; const p = clamp(wj.t/wj.dur, 0, 1);
+      if (p < .3) { cat.x = wj.x0; cat.y = FLOOR - wj.h*easeOut(p/.3); cat.facing = -wj.dir; cat.faceCur = -wj.dir; }
+      else { const u = (p-.3)/.7; cat.x = lerp(wj.x0, wj.land, u); cat.y = FLOOR - wj.h*(1 - u*u); cat.facing = wj.dir; cat.faceCur = wj.dir; }
+      cat.walkPhase += dt*20;
+      if (p >= 1) { cat.y = FLOOR; cat.wall = null; cat.dash = null; }
+    } else if (cat.offTimer > 0) {
       cat.offTimer -= dt;                      // умчался за край и там затих
       if (cat.offTimer <= 0) cat.dash = {x: rnd(W*.2, W*.8), y: rnd(FLOOR - H*.2, FLOOR)};
     } else {
       if (!cat.dash) {
-        cat.dash = Math.random() < .3
-          ? {x: Math.random() < .5 ? -150 : W + 150, y: FLOOR - rnd(0, 50)}
-          : {x: rnd(60, W-60), y: rnd(FLOOR - H*.3, FLOOR)};
+        const r = Math.random();
+        cat.dash = BERSERK_WALLS && r < .5
+          ? {x: cat.x < W/2 ? W - 30 : 30, y: FLOOR, wall: true}
+          : r < (BERSERK_WALLS ? .62 : .3)
+            ? {x: Math.random() < .5 ? -150 : W + 150, y: FLOOR - rnd(0, 50)}
+            : {x: rnd(60, W-60), y: rnd(FLOOR - H*.3, FLOOR)};
       }
       if (stepTo(cat.dash, speed())) {
-        if (cat.x < 0 || cat.x > W) { cat.offTimer = rnd(.7, 1.8); }
+        if (cat.dash.wall) {
+          const dir = cat.x < W/2 ? 1 : -1;
+          const wall = {t: 0, dur: rnd(1.0, 1.4), dir, x0: cat.x,
+                        h: rnd(H*.3, Math.max(H*.3, Math.min(H*.7, FLOOR - 140))), land: 0};
+          wall.land = clamp(cat.x + dir*rnd(W*.25, W*.55), 60, W - 60);
+          cat.wall = wall; say("meow", .4);
+        }
+        else if (cat.x < 0 || cat.x > W) { cat.offTimer = rnd(.7, 1.8); }
         cat.dash = null;
       }
       if (!cat.bubble && Math.random() < .004) say("meow");
     }
-    if (done && cat.offTimer <= 0 && cat.x > 40 && cat.x < W - 40) enter("catch_breath");
+    if (done && !cat.wall && cat.offTimer <= 0 && cat.x > 40 && cat.x < W - 40) enter("catch_breath");
   }
   else if (s === "catch_breath") { if (done) enter(chooseNext()); }
   else if (s === "dodge" || s === "unimpressed") { if (done) enter(chooseNext()); }
@@ -639,7 +657,7 @@ function pose(){
     tailAngle:.45,tailWave:Math.sin(now/1150)*.34,tailWhip:0,legPhase:0,dy:0,lean:0,
     headDx:0,headDy:0,headTilt:0,pdx:0,pdy:0,paw:0,hang:0,crouch:0,squash:0,air:0,
     breathe:Math.sin(now/450)*1.2,squint:0,happy:0,tongue:0,curl:0,roll:0,whisk:0,
-    turnIn:0,flat:0,sideSleep:0,mouthOpen:0,faceFront:0,onBack:0,gallop:0,stretchBody:0,pawUp:0,stretchDown:0,
+    turnIn:0,flat:0,sideSleep:0,mouthOpen:0,faceFront:0,onBack:0,gallop:0,stretchBody:0,pawUp:0,stretchDown:0,spin:0,
     tailTip:Math.sin(now/520)*.1};
   const s = cat.state, t = cat.t;
 
@@ -785,6 +803,14 @@ function pose(){
     q.breathe = Math.sin(now/520)*1.8 + Math.sin(now/55)*.35;   // мелкая вибрация
     q.headDy = 1.5; q.earDroop = .12;
     if (mouse.inside) q.headDx = clamp((mouse.x - cat.x)/70, -3, 4);
+  }
+  else if (s === "berserk" && cat.wall) {
+    // по стене: сначала носом вверх взбегает по краю, потом летит по дуге и клюёт носом к полу
+    const p = clamp(cat.wall.t/cat.wall.dur, 0, 1);
+    q.gallop = 1; q.legPhase = cat.walkPhase*.78; q.pupil = 1; q.eyeOpen = 1; q.mouthOpen = .7;
+    q.earDroop = .5; q.tailAngle = 1.1; q.tailWhip = Math.sin(t*9)*.2;
+    if (p < .3) { q.spin = -Math.PI/2*easeOut(p/.3); q.stretchBody = .8; }
+    else { const u = (p-.3)/.7; q.air = 1; q.stretchBody = 1 - u*.5; q.spin = lerp(-.8, .55, u); q.arch = u*.4; }
   }
   else if (s === "berserk") {
     // прыжковый галоп: в полёте корпус вытянут и лапы вразлёт, при приземлении собран
@@ -1017,6 +1043,7 @@ function drawCat(q){
   ctx.save();
   ctx.translate(cat.x + q.lean, cat.y + (q.dy - turnLift)*k);
   ctx.scale(sx*k, k);
+  if (q.spin) { ctx.translate(0, -28); ctx.rotate(q.spin); ctx.translate(0, 28); }   // вращение вокруг центра корпуса
   ctx.lineJoin = "round";
   // точка, которой кот держится за курсор (передние лапы)
   const gripX = g.front + 28.5, gripY = g.tyF - 23;

@@ -87,6 +87,8 @@ const catHit = () => mouse.inside &&
   Math.hypot(mouse.x - cat.x, mouse.y - (cat.y - 40*CAT.scale)) < 110*CAT.scale;
 let overCatPrev = false;""")
 
+# --- берсерк на мониторе: отталкивается от краёв экрана и взлетает по дуге ---
+rep("""const BERSERK_WALLS = false;""", """const BERSERK_WALLS = true;""")
 # --- на настоящем экране нет нарисованных иконок и окна: к ним не ходим, прячемся за край ---
 rep("""    approach_icon: .05 + P.curiosity*.85,
     berserk: .08 + P.energy*.32""", """    berserk: .08 + P.energy*.32""")
