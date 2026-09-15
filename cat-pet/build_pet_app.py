@@ -121,7 +121,7 @@ rep("""  const q = pose();
   if (over !== overCatPrev) { overCatPrev = over; window.pet.setOverCat(over); }
   requestAnimationFrame(frame);""")
 rep("""  document.getElementById("statebar").textContent =
-    "сейчас: " + (STATE_RU[cat.state] || cat.state) + (bowls.length ? " · на полу миска" : "");""",
+    "сейчас: " + (STATE_RU[cat.state] || cat.state) + (bowls.length ? " · на полу миска" : "") + (toy ? " · на полу мышка" : "");""",
 """  const stText = (STATE_RU[cat.state] || cat.state);
   if (stText !== cat.lastSt) { cat.lastSt = stText; window.pet.setState(CAT.name + ": " + stText); }""")
 
