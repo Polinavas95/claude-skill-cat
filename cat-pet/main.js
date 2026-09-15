@@ -75,17 +75,8 @@ function reloadCat() {
 
 /* ---------- значок в строке меню ---------- */
 function trayIcon() {
-  const S = 18, buf = Buffer.alloc(S * S * 4);
-  const on = (x, y) => {
-    if ((x - 9) ** 2 + (y - 10) ** 2 <= 36) return true;
-    if (y <= 6 && y >= 1 && Math.abs(x - 4) <= (y - 1) / 1.6 + .3) return true;
-    if (y <= 6 && y >= 1 && Math.abs(x - 14) <= (y - 1) / 1.6 + .3) return true;
-    return false;
-  };
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const i = (y * S + x) * 4; buf[i] = buf[i + 1] = buf[i + 2] = 0; buf[i + 3] = on(x, y) ? 255 : 0;
-  }
-  const img = nativeImage.createFromBitmap(buf, { width: S, height: S, scaleFactor: 1 });
+  // след лапы с наклоном; файл *Template.png — macOS сам перекрашивает его под светлую и тёмную строку меню
+  const img = nativeImage.createFromPath(path.join(__dirname, "tray", "trayTemplate.png"));
   img.setTemplateImage(true);
   return img;
 }

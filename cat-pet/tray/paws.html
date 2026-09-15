@@ -1,0 +1,62 @@
+<body style="margin:0;background:#fff">
+<script>
+const pad3 = (g, cx, cy, w, h) => { // подушечка с тремя долями снизу, как на классическом отпечатке
+  g.beginPath();
+  g.moveTo(cx - w*.5, cy - h*.05);
+  g.quadraticCurveTo(cx - w*.45, cy - h*.55, cx, cy - h*.5);
+  g.quadraticCurveTo(cx + w*.45, cy - h*.55, cx + w*.5, cy - h*.05);
+  g.quadraticCurveTo(cx + w*.55, cy + h*.5, cx + w*.2, cy + h*.42);
+  g.quadraticCurveTo(cx, cy + h*.3, cx - w*.2, cy + h*.42);
+  g.quadraticCurveTo(cx - w*.55, cy + h*.5, cx - w*.5, cy - h*.05);
+  g.closePath(); g.fill();
+};
+const toes = (g, list) => list.forEach(([x,y,rx,ry,a]) => { g.beginPath(); g.ellipse(x,y,rx,ry,a||0,0,Math.PI*2); g.fill(); });
+const ICONS = {
+  paw_classic: g => { // как на чёрной картинке: крупные пальцы, широкая подушечка
+    pad3(g, 9, 12.3, 10.5, 7.5);
+    toes(g, [[2.6,7.6,1.9,2.4,-.35],[6.6,4.2,2.1,2.8,-.1],[11.4,4.2,2.1,2.8,.1],[15.4,7.6,1.9,2.4,.35]]);
+  },
+  paw_compact: g => { // плотнее, пальцы ближе к подушечке — лучше читается в 18px
+    pad3(g, 9, 12.5, 11, 7);
+    toes(g, [[3,8.3,2,2.4,-.4],[6.7,5,2.2,2.7,-.1],[11.3,5,2.2,2.7,.1],[15,8.3,2,2.4,.4]]);
+  },
+  paw_tilt: g => { // след с наклоном, как у идущего кота
+    g.save(); g.translate(9,9); g.rotate(-.35); g.translate(-9,-9);
+    pad3(g, 9, 12.3, 10, 7);
+    toes(g, [[2.9,8,1.8,2.2,-.35],[6.7,4.6,2,2.6,-.1],[11.3,4.6,2,2.6,.1],[15.1,8,1.8,2.2,.35]]);
+    g.restore();
+  },
+  paw_trail: g => { // два следа по диагонали, как на третьей картинке
+    const p = (cx, cy, s) => { g.save(); g.translate(cx,cy); g.scale(s,s); g.rotate(-.3); g.translate(-9,-9);
+      pad3(g, 9, 12.3, 10, 7); toes(g, [[2.9,8,1.8,2.2,-.35],[6.7,4.6,2,2.6,-.1],[11.3,4.6,2,2.6,.1],[15.1,8,1.8,2.2,.35]]); g.restore(); };
+    p(5.5, 12.5, .56); p(12.5, 5.5, .56);
+  },
+  paw_beans: g => { // лапа снизу, как на первой картинке: варежка с прорезями подушечек
+    g.beginPath(); g.moveTo(2,17); g.lineTo(2,7); g.quadraticCurveTo(2,2.5,5.5,2.5); g.quadraticCurveTo(7.5,2.5,9,4.5);
+    g.quadraticCurveTo(10.5,2.5,12.5,2.5); g.quadraticCurveTo(16,2.5,16,7); g.lineTo(16,17); g.closePath(); g.fill();
+    g.globalCompositeOperation='destination-out';
+    pad3(g, 9, 12, 8.5, 6);
+    toes(g, [[4,7.6,1.3,1.8,-.2],[7,5,1.3,1.9,0],[11,5,1.3,1.9,0],[14,7.6,1.3,1.8,.2]]);
+    g.globalCompositeOperation='source-over';
+  },
+  paw_outline: g => { // контурный след
+    g.lineWidth = 1.4; g.lineJoin = 'round';
+    const sp = (fn) => { g.save(); const f = g.fill; g.fill = () => g.stroke(); fn(); g.fill = f; g.restore(); };
+    sp(() => { pad3(g, 9, 12.5, 10, 6.5); toes(g, [[3.1,8.2,1.6,2,-.4],[6.8,5,1.8,2.3,-.1],[11.2,5,1.8,2.3,.1],[14.9,8.2,1.6,2,.4]]); });
+  },
+};
+const names = Object.keys(ICONS);
+const c = document.createElement('canvas'); c.width = 620; c.height = 90*names.length; document.body.appendChild(c);
+const g = c.getContext('2d');
+names.forEach((n, i) => {
+  const y = i*90;
+  g.fillStyle = '#000'; g.font = '14px -apple-system'; g.textBaseline='middle'; g.fillText((i+1)+'. '+n, 10, y+45);
+  g.save(); g.translate(200, y+9); g.scale(4,4); g.fillStyle='#000'; g.strokeStyle='#000'; ICONS[n](g); g.restore();
+  g.fillStyle='#e8e8ea'; g.fillRect(320,y+25,120,36); g.fillStyle='#2b2b2e'; g.fillRect(450,y+25,120,36);
+  [[350,'#000'],[480,'#fff']].forEach(([x,col]) => { g.save(); g.translate(x, y+34); g.fillStyle=col; g.strokeStyle=col; ICONS[n](g);
+    g.fillStyle=col; g.font='13px -apple-system'; g.fillText('Робин', 24, 9); g.restore(); });
+});
+window.render = (name, size) => { const k = document.createElement('canvas'); k.width = k.height = size; const q = k.getContext('2d');
+  q.scale(size/18, size/18); q.fillStyle='#000'; q.strokeStyle='#000'; ICONS[name](q); return k.toDataURL('image/png'); };
+window.sheet = () => c.toDataURL('image/png');
+</script></body>
