@@ -1,0 +1,38 @@
+{
+  "name": "Кошка",
+  "sex": "female",
+  "language": "ru",
+  "breed": "british",
+  "scale": 1.0,
+  "speed_scale": 0.9,
+  "appearance": {
+    "base_color": "#cdd1d6",
+    "pattern": "solid",
+    "belly_color": "#f0f1f3",
+    "eye_color": "#a4d39a",
+    "nose_color": "#d98b90",
+    "inner_ear_color": "#f0c4cc",
+    "fur": "short",
+    "ear_style": "normal",
+    "tail": "fluffy",
+    "build": "normal",
+    "face": "round",
+    "extras": []
+  },
+  "personality": {
+    "energy": 0.4,
+    "curiosity": 0.5,
+    "boldness": 0.55,
+    "clinginess": 0.5,
+    "talkativeness": 0.35,
+    "loaf_bias": 0.65
+  },
+  "phrases": {
+    "meow": ["Мяу", "Мр-мяу", "Мрм?"],
+    "purr": ["Мур-р-р", "Мррр"],
+    "scared": ["Ш-ш!"],
+    "annoyed": ["Мрм.", "Хм."],
+    "sleep": ["z-z-z"],
+    "eat": ["Хрум"]
+  }
+}

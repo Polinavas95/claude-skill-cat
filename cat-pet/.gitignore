@@ -1,0 +1,5 @@
+node_modules/
+dist/
+pet.template.html
+breeds.json
+package-lock.json

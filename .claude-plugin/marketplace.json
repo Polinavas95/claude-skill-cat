@@ -1,0 +1,19 @@
+{
+  "name": "cat-skill",
+  "owner": { "name": "Polina Vasileva" },
+  "metadata": {
+    "description": "Цифровой кот по фото и описанию: один HTML-файл с нарисованным кодом питомцем",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "cat-skill",
+      "source": "./plugins/cat-skill",
+      "description": "Создаёт цифрового кота по фотографии и/или описанию — самодостаточный HTML с котом на псевдо-рабочем столе: гуляет, следит за курсором, мурчит, спит, берсеркует.",
+      "version": "1.0.0",
+      "author": { "name": "Polina Vasileva" },
+      "category": "fun",
+      "keywords": ["cat", "pet", "desktop pet", "neko", "canvas", "кот", "питомец"]
+    }
+  ]
+}

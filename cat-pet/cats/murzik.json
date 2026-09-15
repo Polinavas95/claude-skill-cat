@@ -1,0 +1,34 @@
+{
+  "name": "Мурзик",
+  "sex": "male",
+  "language": "ru",
+  "scale": 1.0,
+  "speed_scale": 1.0,
+  "appearance": {
+    "base_color": "#d9a15a",
+    "pattern": "tabby",
+    "pattern_color": "#a5672c",
+    "belly_color": "#f8e6cd",
+    "eye_color": "#7fb069",
+    "nose_color": "#e08b9b",
+    "fur": "medium",
+    "ear_style": "normal",
+    "tail": "fluffy",
+    "build": "chonky",
+    "extras": ["white_socks", "chest_spot"]
+  },
+  "personality": {
+    "energy": 0.6,
+    "curiosity": 0.75,
+    "boldness": 0.35,
+    "clinginess": 0.6,
+    "talkativeness": 0.7,
+    "loaf_bias": 0.5
+  },
+  "phrases": {
+    "meow": ["Мяу", "Мяяу", "Мрм?"],
+    "purr": ["Мур-р-р", "Мррр"],
+    "scared": ["Ш-ш-ш!"],
+    "eat": ["Хрум", "Ням"]
+  }
+}

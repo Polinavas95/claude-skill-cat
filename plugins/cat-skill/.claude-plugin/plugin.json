@@ -1,0 +1,7 @@
+{
+  "name": "cat-skill",
+  "description": "Создаёт цифрового кота по фотографии и/или описанию — самодостаточный HTML с котом на псевдо-рабочем столе.",
+  "version": "1.0.0",
+  "author": { "name": "Polina Vasileva" },
+  "keywords": ["cat", "pet", "desktop pet", "neko", "canvas"]
+}

@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Флинт — цифровой питомец</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px;
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    background: #f6f4ef; color: #26242a;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 2px; font-weight: 650; }
+  .sub { font-size: 13px; color: #6b6761; margin-bottom: 14px; }
+  .stage { position: relative; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18); background: #1d2430; }
+  canvas { display: block; width: 100%; height: auto; }
+  .bar { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  button { font: inherit; font-size: 13px; padding: 7px 13px; border-radius: 8px;
+    border: 1px solid #d6d1c8; background: #fffdf9; color: #26242a; cursor: pointer; }
+  button:hover { background: #f1ece2; }
+  .state { font-size: 12.5px; color: #6b6761; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12.5px; color: #6b6761; margin-top: 10px; line-height: 1.6; }
+  .traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 12px; padding: 4px 9px; border-radius: 99px; background: #ece7dd; color: #4a463f; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1c; color: #eceae4; }
+    .sub, .hint, .state { color: #a6a29a; }
+    button { background: #26262a; border-color: #3a3a40; color: #eceae4; }
+    button:hover { background: #33333a; }
+    .chip { background: #2c2c31; color: #cfcbc3; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Флинт — цифровой питомец</h1>
+  <div class="sub">Наведите мышь на «рабочий стол»: кот следит за курсором, идёт к нему и цепляется. Клик по коту — погладить (иногда увернётся или сделает вид, что не заметил).</div>
+  <div class="stage"><canvas id="stage" width="1720" height="1000"></canvas></div>
+  <div class="bar">
+    <button data-state="walk">Пройтись</button>
+    <button data-state="approach_icon">К иконкам</button>
+    <button data-state="loaf">Буханка</button>
+    <button data-state="sleep">Спать</button>
+    <button data-state="groom">Умываться</button>
+    <button data-state="go_hide">Спрятаться</button>
+    <button data-state="chase_cursor">К курсору</button>
+    <button data-state="petted">Погладить</button>
+    <button data-state="grab_cursor">Повиснуть на курсоре</button>
+    <button data-state="startle">Испугать</button>
+    <button data-state="berserk">Берсерк</button>
+    <button data-bowl="food">Поставить корм</button>
+    <button data-bowl="water">Поставить воду</button>
+    <button id="sexBtn">Сделать кошкой</button>
+  </div>
+  <div class="state" id="statebar"></div>
+  <div class="traits" id="traits"></div>
+  <div class="hint">
+    Резкое движение мыши рядом с котом — испуг: шерсть дыбом, спина дугой. Но иногда он просто
+    дёрнет ухом и не отреагирует, а спящего вообще трудно пронять. Миски появляются сами,
+    редко, и стоят недолго. Звука нет: голос кота — текстовый пузырь. Где кот стоял и сколько
+    его гладили, браузер запоминает: откроете файл завтра — он проснётся там же и поздоровается.
+  </div>
+</div>
+<script>
+const SPEC = {
+  "name": "Флинт",
+  "sex": "male",
+  "language": "ru",
+  "scale": 1.0,
+  "speed_scale": 1.1,
+  "appearance": {
+    "base_color": "#e0883e",
+    "pattern": "tabby",
+    "pattern_color": "#a8551c",
+    "belly_color": "#7a4a2a",
+    "eye_color": "#d9b23c",
+    "nose_color": "#d6807a",
+    "fur": "long",
+    "ear_style": "normal",
+    "tail": "short",
+    "build": "normal",
+    "face": "round",
+    "extras": [
+      "pirate_hat"
+    ],
+    "leg_length": "normal"
+  },
+  "personality": {
+    "energy": 0.85,
+    "curiosity": 0.7,
+    "boldness": 0.75,
+    "clinginess": 0.85,
+    "talkativeness": 0.6,
+    "loaf_bias": 0.2
+  },
+  "phrases": {
+    "meow": [
+      "Мяу!",
+      "Йо-хо!",
+      "Мрря"
+    ],
+    "purr": [
+      "Мур-р-р",
+      "Мррр"
+    ],
+    "scared": [
+      "Ш-ш-ш!"
+    ],
+    "annoyed": [
+      "Арр.",
+      "Тц"
+    ],
+    "sleep": [
+      "z-z-z"
+    ],
+    "eat": [
+      "Хрум",
+      "Ням"
+    ]
+  }
+};
+
+/* ---------- утилиты ---------- */
+function hex2rgb(h){h=String(h||"#999").replace("#","");if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  const n=parseInt(h,16);return isNaN(n)?[150,150,150]:[(n>>16)&255,(n>>8)&255,n&255];}
+function rgb2hex(a){return "#"+a.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");}
+function shade(c,f){const[r,g,b]=hex2rgb(c);if(f<=1)return rgb2hex([r*f,g*f,b*f]);
+  const t=Math.min(1,f-1);return rgb2hex([r+(255-r)*t,g+(255-g)*t,b+(255-b)*t]);}
+function mixc(c1,c2,t){const a=hex2rgb(c1),b=hex2rgb(c2);return rgb2hex([0,1,2].map(i=>a[i]+(b[i]-a[i])*t));}
+const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, rnd=(a,b)=>a+Math.random()*(b-a);
+const easeInOut=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const easeOut=t=>1-Math.pow(1-t,2);
+
+/* ---------- кот из спецификации ---------- */
+const A = Object.assign({base_color:"#9aa0a6",pattern:"tabby",fur:"short",ear_style:"normal",
+  tail:"long",build:"normal",extras:[],eye_color:"#e0a030",nose_color:"#e08b9b",
+  collar_color:"#c0392b"}, SPEC.appearance||{});
+const CAT = {
+  name: SPEC.name || "Кот",
+  scale: clamp(SPEC.scale||1, .5, 2) * 2.6,
+  speed: clamp(SPEC.speed_scale||1, .3, 2),
+  base: A.base_color, pattern: A.pattern,
+  pc: A.pattern_color || shade(A.base_color,.62),
+  belly: A.belly_color || shade(A.base_color,1.35),
+  eye: A.eye_color, nose: A.nose_color,
+  eye2: A.eye_color2 || "#8fc7e8",                          // второй глаз при разноглазии
+  tan: A.tan_color || mixc(A.base_color, "#c8843c", .75),   // подпалины
+  inner: A.inner_ear_color || mixc(A.base_color,"#f5b8c4",.6),
+  sex: String(SPEC.sex || "male").toLowerCase() === "female" ? "female" : "male",
+  fur: A.fur, ear: A.ear_style, tail: A.tail, build: A.build,
+  face: String(A.face || "round").toLowerCase(),          // round | flat | wedge
+  legs: String(A.leg_length || "normal").toLowerCase(),    // short | normal | long
+  hairless: String(A.fur).toLowerCase() === "hairless",
+  extras: (A.extras||[]).map(s=>String(s).toLowerCase()),
+  collar: A.collar_color
+};
+const P = Object.assign({energy:.5,curiosity:.5,boldness:.4,clinginess:.5,talkativeness:.5,loaf_bias:.4},
+  SPEC.personality||{});
+const PH = Object.assign({meow:["Мяу"],purr:["Мур-р-р"],scared:["Ш-ш-ш!"],sleep:["z-z-z"],
+  eat:["Хрум"],annoyed:["Мрм."]}, SPEC.phrases||{});
+
+document.getElementById("title").textContent = CAT.name + " — цифровой питомец";
+const traitNames = {energy:"энергия",curiosity:"любопытство",boldness:"смелость",
+  clinginess:"липучесть",talkativeness:"разговорчивость",loaf_bias:"любовь к буханке"};
+document.getElementById("traits").innerHTML = Object.keys(traitNames)
+  .map(k=>`<span class="chip">${traitNames[k]} ${Math.round((P[k]??.5)*100)}%</span>`).join("");
+
+/* ---------- сцена ---------- */
+const cv = document.getElementById("stage"), ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height, FLOOR = H - 70;
+const ICONS = [];
+for (let col=0; col<2; col++) for (let row=0; row<3; row++)
+  ICONS.push({x: 90 + col*150, y: 150 + row*150, shake: 0});
+const WINDOW_RECT = {x: W*0.46, y: H*0.18, w: W*0.44, h: H*0.50};
+const STATE_RU = {idle:"стоит",walk:"гуляет",sit:"сидит",loaf:"буханка",sleep:"спит",
+  groom:"умывается",stretch:"потягивается",approach_icon:"идёт к иконке",paw_icon:"трогает иконку",
+  crouch:"приседает перед прыжком",jump_up:"в прыжке",land:"приземляется",sit_on_icon:"сидит на иконке",
+  jump_down:"спрыгивает",go_hide:"идёт прятаться",hidden:"спрятался",peek:"выглядывает",
+  watch_cursor:"следит за курсором",chase_cursor:"идёт к курсору",grab_cursor:"висит на курсоре",
+  startle:"испугался",calm_down:"успокаивается",unimpressed:"не впечатлён",petted:"его гладят",
+  dodge:"уворачивается",approach_bowl:"идёт к миске",eat:"ест",drink:"пьёт",
+  fall:"срывается с курсора",sniff:"принюхивается",purring:"мурчит под рукой",
+  berserk:"берсерк!",catch_breath:"отдыхивается"};
+
+let mouse = {x: W*0.7, y: H*0.5, inside: false}, mousePrev = null, mouseSpeed = 0;
+cv.addEventListener("mousemove", e => {
+  const r = cv.getBoundingClientRect();
+  const nx = (e.clientX-r.left)*(W/r.width), ny = (e.clientY-r.top)*(H/r.height);
+  if (mousePrev) mouseSpeed = mouseSpeed*.6 + Math.hypot(nx-mousePrev.x, ny-mousePrev.y)*.4;
+  mousePrev = {x:nx,y:ny}; mouse = {x:nx,y:ny,inside:true};
+});
+cv.addEventListener("mouseleave", () => { mouse.inside = false; mouseSpeed = 0; });
+cv.addEventListener("click", e => {
+  const r = cv.getBoundingClientRect();
+  const nx = (e.clientX-r.left)*(W/r.width), ny = (e.clientY-r.top)*(H/r.height);
+  if (Math.hypot(nx - cat.x, ny - (cat.y - 40*CAT.scale)) < 110*CAT.scale) tryPet(nx);
+});
+document.querySelectorAll("button[data-state]").forEach(b =>
+  b.addEventListener("click", () => enter(b.dataset.state)));
+const bowlButtons = [...document.querySelectorAll("button[data-bowl]")];
+bowlButtons.forEach(b => b.addEventListener("click", () => toggleBowl(b.dataset.bowl)));
+const sexBtn = document.getElementById("sexBtn");
+function refreshSexBtn(){
+  sexBtn.textContent = CAT.sex === "male" ? "Сделать кошкой" : "Сделать котом";
+}
+sexBtn.addEventListener("click", () => {
+  CAT.sex = CAT.sex === "male" ? "female" : "male";
+  refreshSexBtn(); saveState();
+});
+refreshSexBtn();
+
+/* ---------- миски ---------- */
+const bowls = [];
+function bowlOf(kind){ return bowls.find(b => b.kind === kind) || null; }
+function toggleBowl(kind){
+  const b = bowlOf(kind);
+  if (b) removeBowl(b); else spawnBowl(kind);
+  refreshBowlButtons();
+}
+function removeBowl(b){
+  const i = bowls.indexOf(b);
+  if (i >= 0) bowls.splice(i, 1);
+  if (cat.bowl === b) {
+    cat.bowl = null;
+    if (["eat","drink","approach_bowl"].includes(cat.state)) enter("idle");
+  }
+}
+function refreshBowlButtons(){
+  bowlButtons.forEach(btn => {
+    const word = btn.dataset.bowl === "food" ? "корм" : "воду";
+    btn.textContent = (bowlOf(btn.dataset.bowl) ? "Убрать " : "Поставить ") + word;
+  });
+}
+function spawnBowl(kind){
+  if (bowlOf(kind) || bowls.length >= 2) return;
+  bowls.push({x: rnd(W*0.25, W*0.85), y: FLOOR + 6, kind,
+              life: kind === "food" ? 70 : 60, level: 1, ripple: 0});
+}
+function nearestBowl(){
+  const free = bowls.filter(b => b.level > .05);
+  if (!free.length) return null;
+  return free.reduce((a,b) => Math.abs(b.x-cat.x) < Math.abs(a.x-cat.x) ? b : a);
+}
+
+/* ---------- состояние кота ---------- */
+const cat = {
+  x: W*0.3, y: FLOOR, facing: 1, faceCur: 1,
+  state: "idle", t: 0, dur: 1.5, prevBig: "",
+  target: null, icon: null, bowl: null, hideBehind: false,
+  walkPhase: 0, bubble: null, bubbleT: 0,
+  jump: null, after: "idle",
+  startleCd: 0, grabCd: 0, bowlCd: 14, calmReturn: "idle",
+  earFlick: 0, blink: 0, blinkCd: 3, dodgeDir: 1,
+  grip: 0, vy: 0, gripLocal: {x: 56, y: -61},
+  speedMul: 1, dash: null, offTimer: 0,
+  stroke: 0, strokeCd: 0, bowlSig: "",
+  lookX: 0, lookY: 0, lookTarget: {x: 0, y: 0}, lookCd: 2, flickCd: 5,
+  pets: 0, wakeGreet: false
+};
+const BIG = new Set(["walk","loaf","sleep","sit","approach_icon","go_hide","chase_cursor",
+  "watch_cursor","groom","stretch","approach_bowl"]);
+
+function say(kind, chance=1){
+  if (Math.random() > chance) return;
+  const list = PH[kind] || ["..."];
+  cat.bubble = list[Math.floor(Math.random()*list.length)]; cat.bubbleT = 1.7;
+}
+
+function startJump(to, after){
+  const from = {x: cat.x, y: cat.y};
+  const dist = Math.hypot(to.x-from.x, to.y-from.y);
+  const d = dist / CAT.scale, rise = Math.max(0, from.y-to.y) / CAT.scale;
+  cat.jump = {from, to, arc: clamp(16 + d*.32 + rise*.3, 16, 52)};
+  cat.after = after;
+  cat.dur = clamp(.42 + dist/750, .42, 1.0);
+  cat.facing = to.x >= from.x ? 1 : -1;
+  cat.t = 0;
+}
+
+const GROUND = new Set(["walk","idle","sit","loaf","sleep","groom","stretch","sniff","purring","petted",
+  "unimpressed","dodge","watch_cursor","chase_cursor","approach_icon","approach_bowl","go_hide","berserk"]);
+function enter(s){
+  // с иконки на землю только прыжком: испуг или поглаживание наверху не должны ронять кота по воздуху
+  if (GROUND.has(s) && cat.y < FLOOR - 300 && !cat.jump) s = "jump_down";
+  cat.state = s; cat.t = 0; if (BIG.has(s)) cat.prevBig = s;
+  const talk = P.talkativeness*2;
+  // каждый переход — своя скорость: то плетётся, то идёт бодро
+  if (["walk","approach_icon","approach_bowl","go_hide"].includes(s)) cat.speedMul = rnd(.5, 1.25);
+  if (s === "chase_cursor") cat.speedMul = rnd(.9, 1.35);
+  switch(s){
+    case "idle": cat.dur = rnd(1,3); break;
+    case "walk":
+      cat.target = {x: rnd(120, W-120), y: rnd(FLOOR-H*.26, FLOOR)};
+      cat.dur = 30; say("meow", .08*talk); break;
+    case "sit": cat.dur = rnd(3,8); break;
+    case "loaf": cat.dur = rnd(5,10) + (1-P.energy)*11; say("purr", .3*talk); break;
+    case "sleep": cat.dur = rnd(12,20) + (1-P.energy)*22; break;
+    case "groom": cat.dur = rnd(3.5,6); break;
+    case "stretch": cat.dur = 1.6; break;
+    case "approach_icon":
+      cat.icon = ICONS[Math.floor(Math.random()*ICONS.length)];
+      cat.target = {x: cat.icon.x - 70, y: cat.icon.y + 62}; cat.dur = 25; break;
+    case "paw_icon": cat.dur = rnd(1.8,3.2); say("meow", .18*talk); break;
+    case "crouch": cat.dur = .3; break;
+    case "jump_up":
+      startJump(cat.icon ? {x: cat.icon.x, y: cat.icon.y + 22}
+                         : {x: clamp(cat.x + 90*cat.facing, 40, W-40), y: cat.y},
+                "sit_on_icon");
+      break;
+    case "jump_down":
+      startJump({x: clamp(cat.x + rnd(70,150)*(cat.x < W*.5 ? 1 : -1), 40, W-40), y: FLOOR},
+                "land");
+      break;
+    case "land": cat.dur = .26; break;
+    case "sit_on_icon": cat.dur = rnd(4,11); say("purr", .22*talk); break;
+    case "go_hide":
+      cat.hideBehind = Math.random() < .75;
+      cat.target = cat.hideBehind
+        ? {x: WINDOW_RECT.x + 26, y: WINDOW_RECT.y + WINDOW_RECT.h - 30}
+        : {x: (Math.random()<.5 ? 30 : W-30), y: FLOOR};
+      cat.dur = 25; break;
+    case "hidden": cat.dur = rnd(3,9); break;
+    case "peek": cat.dur = rnd(1.6,3); break;
+    case "watch_cursor": cat.dur = rnd(1.2,3); break;
+    case "chase_cursor": cat.dur = 12; break;
+    case "grab_cursor":
+      cat.dur = rnd(2.5,4.5); cat.grip = 1.5 + P.boldness*1.2; say("meow", .5); break;
+    case "fall": cat.dur = 2.5; cat.vy = 40; say("scared", .8); break;
+    case "sniff": cat.dur = rnd(1.2,2.2); break;
+    case "purring": cat.dur = rnd(2.5,4); cat.pets = (cat.pets || 0) + 1; say("purr", .9); break;
+    case "berserk":
+      cat.dur = rnd(4.5, 9); cat.dash = null; cat.offTimer = 0;
+      cat.speedMul = rnd(2.6, 3.6); say("meow", .9); break;
+    case "catch_breath": cat.dur = rnd(1.8, 3); cat.speedMul = 1; break;
+    case "startle": cat.dur = .45; say("scared", .7); break;
+    case "calm_down": cat.dur = 1.2; break;
+    case "unimpressed": cat.dur = 1.1; cat.earFlick = 1; say("annoyed", .25); break;
+    case "petted": cat.dur = 1.8; cat.pets = (cat.pets || 0) + 1; say("purr", .6); break;
+    case "dodge": cat.dur = .9; say("annoyed", .35); break;
+    case "approach_bowl": {
+      const b = nearestBowl();
+      if (!b) { enter("walk"); return; }
+      cat.bowl = b;
+      cat.target = {x: b.x - 94*(cat.x < b.x ? 1 : -1), y: FLOOR};
+      cat.dur = 25; break;
+    }
+    case "eat": cat.dur = rnd(4,7); say("eat", .5); break;
+    case "drink": cat.dur = rnd(3.5,6); break;
+    default: cat.dur = 2;
+  }
+}
+
+function chooseNext(){
+  const o = {
+    walk: .30 + P.energy*.8,
+    idle: .35 + (1-P.energy)*.5,
+    sit: .25 + (1-P.energy)*.45,
+    loaf: .15 + (1-P.energy)*.7 + P.loaf_bias*.8,
+    sleep: .04 + (1-P.energy)*.45*P.loaf_bias,
+    groom: .30,
+    stretch: .15,
+    sniff: .35 + P.curiosity*.3,
+    go_hide: .05 + (1-P.boldness)*.45,
+    watch_cursor: .10 + P.curiosity*.4,
+    approach_icon: .05 + P.curiosity*.85,
+    berserk: .08 + P.energy*.32
+  };
+  // пока его гладят, кот не убегает ловить курсор
+  if (cat.grabCd <= 0 && cat.stroke < .5) o.chase_cursor = .05 + P.clinginess + Math.min(.2, (cat.pets || 0)*.004);
+  if (nearestBowl()) o.approach_bowl = 1.6 + P.curiosity*.8;
+  if (cat.prevBig && cat.prevBig !== "idle") delete o[cat.prevBig];
+  const keys = Object.keys(o), total = keys.reduce((s,k)=>s+o[k],0);
+  let roll = Math.random()*total;
+  for (const k of keys) { roll -= o[k]; if (roll <= 0) return k; }
+  return "idle";
+}
+
+/* ---------- реакции на человека ---------- */
+const ignoreChance = () => .18 + P.boldness*.5;
+const BUSY = ["startle","jump_up","crouch","land","jump_down","grab_cursor","dodge","fall"];
+
+function tryPet(nx){
+  if (BUSY.includes(cat.state)) return;
+  const roll = Math.random();
+  if (roll < .30) { cat.dodgeDir = nx > cat.x ? -1 : 1; enter("dodge"); }
+  else if (roll < .30 + ignoreChance()*.6) { cat.earFlick = 1; say("annoyed", .3); }
+  else enter("petted");
+}
+
+function maybeStartle(){
+  if (!mouse.inside || cat.startleCd > 0) return;
+  if (BUSY.includes(cat.state) || ["calm_down","hidden"].includes(cat.state)) return;
+  if (mouseSpeed < 55 + P.boldness*120) return;
+  if (Math.hypot(mouse.x-cat.x, mouse.y-cat.y) > 520) return;
+  cat.startleCd = 3.5;
+  if (cat.state === "sleep" && Math.random() < .5) return;
+  if (Math.random() < ignoreChance()) { enter("unimpressed"); return; }
+  cat.calmReturn = "idle";
+  enter("startle");
+}
+
+/* ---------- движение ---------- */
+function stepTo(t, sp){
+  const dx = t.x - cat.x, dy = t.y - cat.y, d = Math.hypot(dx,dy);
+  if (Math.abs(dx) > 26) cat.facing = dx > 0 ? 1 : -1;
+  const turning = .35 + .65*Math.abs(cat.faceCur);
+  const step = sp * turning;
+  if (d < step) { cat.x = t.x; cat.y = t.y; return true; }
+  cat.x += dx/d*step; cat.y += dy/d*step;
+  cat.walkPhase += .24*turning;
+  return false;
+}
+const speed = () => (1.15 + P.energy*2.5) * CAT.speed * 1.5 * (cat.speedMul || 1);
+
+/* ---------- обновление ---------- */
+function update(dt){
+  cat.t += dt; cat.bubbleT -= dt; cat.startleCd -= dt; cat.grabCd -= dt;
+  cat.bowlCd -= dt; cat.earFlick = Math.max(0, cat.earFlick - dt*2.2);
+  cat.faceCur += (cat.facing - cat.faceCur) * Math.min(1, dt*7.5);
+  if (cat.bubbleT <= 0) cat.bubble = null;
+  ICONS.forEach(i => i.shake = Math.max(0, i.shake - dt*3));
+
+  if (cat.bowlCd <= 0) {
+    cat.bowlCd = rnd(35, 70);
+    if (bowls.length < 1 && Math.random() < .6) spawnBowl(Math.random() < .5 ? "food" : "water");
+  }
+  for (let i = bowls.length-1; i >= 0; i--) {
+    bowls[i].life -= dt; bowls[i].ripple = Math.max(0, bowls[i].ripple - dt*1.5);
+    if (bowls[i].life <= 0 || bowls[i].level <= .05) {
+      if (cat.bowl === bowls[i]) cat.bowl = null;
+      bowls.splice(i,1);
+    }
+  }
+
+  cat.blinkCd -= dt;
+  if (cat.blinkCd <= 0) { cat.blinkCd = rnd(2.5,6); cat.blink = 1; }
+  cat.blink = Math.max(0, cat.blink - dt*4);
+
+  // кот всё время чем-то занят: осматривается и подёргивает ухом
+  cat.lookCd -= dt;
+  if (cat.lookCd <= 0) { cat.lookCd = rnd(1.6,4.5); cat.lookTarget = {x: rnd(-4,5), y: rnd(-2.5,3)}; }
+  cat.lookX += (cat.lookTarget.x - cat.lookX) * Math.min(1, dt*3.2);
+  cat.lookY += (cat.lookTarget.y - cat.lookY) * Math.min(1, dt*3.2);
+  cat.flickCd -= dt;
+  if (cat.flickCd <= 0) { cat.flickCd = rnd(3,9); cat.earFlick = 1; }
+
+  // курсор медленно скользит по коту — это воспринимается как поглаживание
+  const overCat = mouse.inside &&
+    Math.hypot(mouse.x - cat.x, mouse.y - (cat.y - 30*CAT.scale)) < 46*CAT.scale;
+  cat.strokeCd -= dt;
+  if (overCat && mouseSpeed < 70) {
+    // ведут по коту — копится «поглаживание»; если рука просто лежит, копится медленно
+    cat.stroke += dt * (mouseSpeed > 1.2 ? 1.2 + mouseSpeed*.05 : .35);
+  } else {
+    cat.stroke = Math.max(0, cat.stroke - dt*.45);
+  }
+  // гладить можно почти всегда — кот останавливается и начинает мурчать
+  const NO_PET = ["hidden","peek","eat","drink","approach_bowl","chase_cursor","purring",
+                  "sleep","startle","calm_down","jump_up","jump_down","crouch","land",
+                  "grab_cursor","fall","dodge"];
+  if (cat.stroke > 1.1 && cat.strokeCd <= 0 && !NO_PET.includes(cat.state)) {
+    cat.strokeCd = rnd(5,9);
+    // мурчит не всегда: иногда только дёрнет ухом
+    if (Math.random() < .75 - P.boldness*.25) enter("purring");
+    else { cat.earFlick = 1; cat.stroke = 0; say("annoyed", .2); }
+  }
+
+  maybeStartle();
+
+  const done = cat.t >= cat.dur, s = cat.state;
+  if (s === "walk") { if (stepTo(cat.target, speed()) || done) enter(chooseNext()); }
+  else if (s === "approach_icon") {
+    if (stepTo(cat.target, speed()) || done) {
+      if (cat.icon) cat.facing = cat.icon.x > cat.x ? 1 : -1;
+      enter(P.curiosity > .45 && Math.random() < P.curiosity ? "crouch" : "paw_icon");
+    }
+  }
+  else if (s === "paw_icon") {
+    if (cat.icon && ((cat.t/1.3) % 1) > .78 && ((cat.t/1.3) % 1) < .85) cat.icon.shake = 1;
+    if (done) enter(P.curiosity > .45 && Math.random() < .45 ? "crouch" : chooseNext());
+  }
+  else if (s === "crouch") { if (done) enter("jump_up"); }
+  else if (s === "jump_up" || s === "jump_down") {
+    const p = clamp(cat.t/cat.dur, 0, 1), e = easeInOut(p);
+    cat.x = lerp(cat.jump.from.x, cat.jump.to.x, e);
+    cat.y = lerp(cat.jump.from.y, cat.jump.to.y, e);
+    if (p >= 1) { const nxt = cat.after === "sit_on_icon" ? "sit_on_icon" : "land"; cat.jump = null; enter(nxt); }
+  }
+  else if (s === "land") { if (done) enter(chooseNext()); }
+  else if (s === "sit_on_icon") { if (done) enter("jump_down"); }
+  else if (s === "go_hide") { if (stepTo(cat.target, speed()) || done) enter("hidden"); }
+  else if (s === "hidden") { if (done) enter(Math.random() < .7 ? "peek" : chooseNext()); }
+  else if (s === "peek") { if (done) enter(Math.random() < .45 ? "hidden" : chooseNext()); }
+  else if (s === "chase_cursor") {
+    if (!mouse.inside) enter("idle");
+    else {
+      stepTo({x: mouse.x, y: clamp(mouse.y + 38, 120, FLOOR)}, speed()*1.25);
+      if (Math.hypot(mouse.x-cat.x, mouse.y-cat.y) < 70) enter("grab_cursor");
+      else if (done) enter("idle");
+    }
+  }
+  else if (s === "grab_cursor") {
+    if (!mouse.inside) enter("fall");
+    else {
+      // курсор держим ровно в передних лапах, а не серединой корпуса
+      cat.x = mouse.x - cat.gripLocal.x * CAT.scale * cat.facing;
+      cat.y = mouse.y - cat.gripLocal.y * CAT.scale;
+      cat.grip -= Math.max(0, mouseSpeed - 45) * dt * .02;
+      if (cat.grip <= 0) enter("fall");
+      else if (done) { cat.grabCd = rnd(6,10); enter("fall"); }
+    }
+  }
+  else if (s === "fall") {
+    cat.vy += 1500*dt;
+    cat.y += cat.vy*dt;
+    if (cat.y >= FLOOR || done) { cat.y = FLOOR; cat.grabCd = rnd(7,12); enter("land"); }
+  }
+  else if (s === "approach_bowl") {
+    if (!cat.bowl) enter("walk");
+    else if (stepTo(cat.target, speed()) || done) {
+      cat.facing = cat.bowl.x > cat.x ? 1 : -1;
+      enter(cat.bowl.kind === "food" ? "eat" : "drink");
+    }
+  }
+  else if (s === "eat" || s === "drink") {
+    if (!cat.bowl) enter("idle");
+    else {
+      cat.bowl.level = Math.max(0, cat.bowl.level - dt*(s === "eat" ? .10 : .07));
+      if (s === "drink" && Math.sin(cat.t*9) > .9) cat.bowl.ripple = 1;
+      if (done) { say(s === "eat" ? "eat" : "purr", .4); enter(chooseNext()); }
+    }
+  }
+  else if (s === "startle") { if (done) enter("calm_down"); }
+  else if (s === "calm_down") { if (done) enter(cat.calmReturn); }
+  else if (s === "berserk") {
+    if (cat.offTimer > 0) {
+      cat.offTimer -= dt;                      // умчался за край и там затих
+      if (cat.offTimer <= 0) cat.dash = {x: rnd(W*.2, W*.8), y: rnd(FLOOR - H*.2, FLOOR)};
+    } else {
+      if (!cat.dash) {
+        cat.dash = Math.random() < .3
+          ? {x: Math.random() < .5 ? -150 : W + 150, y: FLOOR - rnd(0, 50)}
+          : {x: rnd(60, W-60), y: rnd(FLOOR - H*.3, FLOOR)};
+      }
+      if (stepTo(cat.dash, speed())) {
+        if (cat.x < 0 || cat.x > W) { cat.offTimer = rnd(.7, 1.8); }
+        cat.dash = null;
+      }
+      if (!cat.bubble && Math.random() < .004) say("meow");
+    }
+    if (done && cat.offTimer <= 0 && cat.x > 40 && cat.x < W - 40) enter("catch_breath");
+  }
+  else if (s === "catch_breath") { if (done) enter(chooseNext()); }
+  else if (s === "dodge" || s === "unimpressed") { if (done) enter(chooseNext()); }
+  else if (s === "purring") {
+    if (!cat.bubble && cat.t > .5 && Math.random() < .02) say("purr");
+    if (cat.stroke <= .05 && cat.t > 1) enter(chooseNext());
+    else if (done) enter(cat.stroke > .5 ? "purring" : chooseNext());
+  }
+  else if (["idle","sit","loaf","sleep","groom","stretch","petted","watch_cursor","sniff"].includes(s)) {
+    if (s === "sleep" && !cat.bubble && Math.random() < .006) say("sleep");
+    if (done) {
+      if (s === "sleep" && (cat.wakeGreet || Math.random() < .6)) {
+        // проснулся — потягивается; если хозяин вернулся после долгого отсутствия, ещё и здоровается
+        if (cat.wakeGreet) { cat.wakeGreet = false; say("meow", .95); }
+        enter("stretch");
+      } else enter(chooseNext());
+    }
+  }
+  cat.x = cat.state === "berserk" ? clamp(cat.x, -180, W + 180) : clamp(cat.x, 20, W-20);
+  if (!["grab_cursor","fall"].includes(cat.state)) cat.y = clamp(cat.y, 100, FLOOR);
+  else cat.y = clamp(cat.y, -40, FLOOR);
+  const sig = bowls.map(b => b.kind).sort().join(",");
+  if (sig !== cat.bowlSig) { cat.bowlSig = sig; refreshBowlButtons(); }
+  document.getElementById("statebar").textContent =
+    "сейчас: " + (STATE_RU[cat.state] || cat.state) + (bowls.length ? " · на полу миска" : "");
+}
+
+/* ---------- поза ---------- */
+function pose(){
+  const now = performance.now();
+  const q = {arch:0,sag:0,fluff:0,sit:0,loaf:0,eyeOpen:1,pupil:.45,earDroop:0,earFlick:0,
+    tailAngle:.45,tailWave:Math.sin(now/1150)*.34,tailWhip:0,legPhase:0,dy:0,lean:0,
+    headDx:0,headDy:0,headTilt:0,pdx:0,pdy:0,paw:0,hang:0,crouch:0,squash:0,air:0,
+    breathe:Math.sin(now/450)*1.2,squint:0,happy:0,tongue:0,curl:0,roll:0,whisk:0,
+    turnIn:0,flat:0,sideSleep:0,mouthOpen:0,faceFront:0,onBack:0,gallop:0,stretchBody:0,pawUp:0,
+    tailTip:Math.sin(now/520)*.1};
+  const s = cat.state, t = cat.t;
+
+  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl"].includes(s)) {
+    q.legPhase = cat.walkPhase;
+    q.tailAngle = .4 + Math.sin(cat.walkPhase*.16)*.18;
+  }
+  else if (s === "sit") { q.sit = 1; q.tailAngle = .1; }
+  else if (s === "sit_on_icon") { q.sit = 1; q.tailAngle = -.45; q.squint = .35; }
+  else if (s === "loaf") {
+    const slow = Math.sin(t*.8);
+    q.loaf = 1; q.happy = 1; q.squint = .5; q.curl = .35; q.turnIn = 1; q.faceFront = 1;
+    q.eyeOpen = slow > .55 ? .05 : lerp(.42, .16, clamp((slow+1)/2, 0, 1));
+    q.tailAngle = -.08; q.breathe = Math.sin(now/700)*2;
+  }
+  else if (s === "sleep") {
+    // спит на спине, лапки поджаты (по фото)
+    q.loaf = 1; q.happy = 1; q.eyeOpen = 0; q.curl = .25; q.earDroop = .55;
+    q.flat = 1; q.onBack = 1;
+    q.tailAngle = -.12; q.breathe = Math.sin(now/1100)*2.6;
+    q.headDy = 4 + Math.sin(now/1100)*1.2; q.headTilt = .78; q.headDx = 2;
+  }
+  else if (s === "groom") {
+    const lick = Math.sin(t*7.5);
+    q.sit = 1; q.paw = .62 + .22*lick; q.headDy = 9 + 4*lick; q.headTilt = .18;
+    q.eyeOpen = .35; q.squint = .5; q.happy = 1; q.tongue = lick > .2 ? 1 : 0;
+    q.tailAngle = .05;
+  }
+  else if (s === "stretch") {
+    q.sag = Math.sin(clamp(t/cat.dur,0,1)*Math.PI);
+    q.tailAngle = .95; q.eyeOpen = .3; q.squint = .4;
+  }
+  else if (s === "paw_icon") {
+    // замах: плавно поднимает лапу и так же плавно опускает, потом короткая пауза
+    const ph = (t/1.3) % 1;
+    const up = ph < .5 ? easeInOut(ph/.5)
+                       : (ph < .8 ? 1 - easeInOut((ph - .5)/.3) : 0);
+    q.paw = .8; q.pawUp = up; q.sit = .3; q.pupil = .7;
+    q.headDy = 1 + (1-up)*2;
+  }
+  else if (s === "crouch") {
+    const p = clamp(t/cat.dur,0,1);
+    q.crouch = easeOut(p); q.pupil = .85; q.headDy = 2*p;
+    q.tailAngle = -.1 + Math.sin(t*14)*.12;
+  }
+  else if (s === "jump_up" || s === "jump_down") {
+    const p = clamp(t/cat.dur,0,1);
+    q.dy = -cat.jump.arc * Math.sin(p*Math.PI);
+    q.air = 1; q.pupil = .8;
+    q.legPhase = lerp(-.9, 1.1, p);
+    q.arch = .18*Math.sin(p*Math.PI);
+    q.tailAngle = lerp(.9, .2, p);
+    q.paw = p > .72 ? (p-.72)/.28*.5 : 0;
+  }
+  else if (s === "land") {
+    const p = clamp(t/cat.dur,0,1);
+    q.squash = (1-p)*(1-p); q.sit = .25*(1-p); q.pupil = .6;
+    q.tailAngle = .25 + .3*(1-p);
+  }
+  else if (s === "hidden") {
+    // за окном: наружу торчит только хвост трубой
+    q.sit = 1; q.earDroop = .3; q.pupil = .7;
+    q.tailAngle = 1.3 + Math.sin(now/600)*.12;
+  }
+  else if (s === "peek") { q.sit = 1; q.pupil = .75; q.headDx = 6; }
+  else if (s === "grab_cursor") {
+    // висит на передних лапах: корпус свешивается назад-вниз и покачивается
+    q.hang = 1; q.roll = .46 + Math.sin(t*2.6)*.09;
+    q.tailAngle = -.9 + Math.sin(t*4)*.25;
+    q.legPhase = t*6; q.pupil = .8;
+    const slipping = cat.grip < .7;
+    q.earDroop = slipping ? .5 : .15;
+    q.whisk = slipping ? Math.sin(t*22)*1.6 : 0;
+    q.eyeOpen = slipping ? 1 : .9;
+  }
+  else if (s === "fall") {
+    q.air = 1; q.pupil = 1; q.eyeOpen = 1;
+    q.roll = Math.max(0, .46 - t*2.2);        // в воздухе выравнивается
+    q.tailAngle = 1.2; q.arch = .2; q.earDroop = .35;
+    q.legPhase = 1.2; q.paw = .4;
+  }
+  else if (s === "sniff") {
+    q.sit = .25; q.headDy = 11 + Math.sin(t*9)*1.4; q.headDx = 4;
+    q.eyeOpen = .8; q.whisk = Math.sin(t*13)*1.4; q.pupil = .55;
+    q.tailAngle = .3 + Math.sin(t*2)*.2;
+  }
+  else if (s === "startle") {
+    const p = clamp(t/cat.dur,0,1);
+    q.fluff = Math.min(1,p*2.5); q.arch = Math.min(1,p*2.5);
+    q.tailAngle = 1.5; q.pupil = 1; q.earDroop = .6; q.mouthOpen = .55;
+  }
+  else if (s === "calm_down") {
+    const p = 1 - clamp(t/cat.dur,0,1);
+    q.fluff = p; q.arch = p*.8; q.tailAngle = lerp(.45,1.5,p);
+    q.pupil = lerp(.45,1,p); q.earDroop = p*.5;
+    q.breathe = Math.sin(now/120)*2*p;
+  }
+  else if (s === "unimpressed") {
+    const p = clamp(t/cat.dur,0,1);
+    q.sit = .5; q.eyeOpen = p < .35 ? .12 : .8; q.squint = .3; q.happy = p < .35 ? 1 : 0;
+    q.earFlick = 1 - p; q.tailWhip = Math.sin(t*11)*.5; q.tailAngle = .25;
+  }
+  else if (s === "petted") {
+    q.squint = .9; q.happy = 1; q.eyeOpen = .06; q.sit = .6; q.headDy = 2;
+    q.tailAngle = .25 + Math.sin(t*6)*.35;
+  }
+  else if (s === "dodge") {
+    const p = clamp(t/cat.dur,0,1), amp = Math.sin(p*Math.PI);
+    q.arch = .55*amp; q.lean = 16*amp*cat.dodgeDir; q.dy = -6*amp;
+    q.headDx = -5*amp; q.earDroop = .45*amp; q.pupil = .85; q.eyeOpen = .85;
+    q.tailWhip = Math.sin(t*13)*.7; q.tailAngle = .8*amp;
+  }
+  else if (s === "eat" || s === "drink") {
+    const bob = Math.sin(t*(s === "eat" ? 7 : 9));
+    q.sit = .2; q.headDy = 25 + bob*3.5; q.headDx = 8; q.headTilt = .16;
+    q.eyeOpen = 0; q.happy = 1; q.squint = .45;
+    q.tailAngle = .2 + Math.sin(t*1.6)*.15;
+    q.tongue = (s === "drink" && bob > .2) ? 1 : 0;
+  }
+  else if (s === "purring") {
+    q.sit = .45; q.happy = 1; q.squint = .9; q.eyeOpen = .1; q.faceFront = .55;
+    q.tailAngle = .2 + Math.sin(t*1.8)*.28;
+    q.breathe = Math.sin(now/520)*1.8 + Math.sin(now/55)*.35;   // мелкая вибрация
+    q.headDy = 1.5; q.earDroop = .12;
+    if (mouse.inside) q.headDx = clamp((mouse.x - cat.x)/70, -3, 4);
+  }
+  else if (s === "berserk") {
+    // прыжковый галоп: в полёте корпус вытянут и лапы вразлёт, при приземлении собран
+    const ph = cat.walkPhase*.78;
+    const air = Math.max(0, Math.sin(ph));
+    q.legPhase = ph; q.gallop = 1;
+    q.dy = -air*15;
+    q.stretchBody = .35 + .65*air;
+    q.arch = .5*(1 - air);
+    q.tailAngle = 1.0 + air*.35; q.tailWhip = Math.sin(ph*2)*.25;
+    q.earDroop = .55; q.pupil = 1; q.eyeOpen = 1;
+    q.headDy = 3 + (1-air)*2; q.headDx = 3;
+    q.mouthOpen = .85; q.whisk = Math.sin(t*20)*1.2;
+  }
+  else if (s === "catch_breath") {
+    q.sit = .7; q.eyeOpen = .75; q.earDroop = .2;
+    q.mouthOpen = .45 + Math.sin(t*9)*.18;
+    q.breathe = Math.sin(now/130)*2.2;
+    q.tailAngle = .15 + Math.sin(t*2)*.15;
+  }
+  else if (s === "idle") { q.tailAngle = .45 + Math.sin(now/1500)*.16; }
+
+  if (cat.blink > 0 && q.eyeOpen > .4 && !["startle","jump_up","crouch","fall"].includes(s))
+    q.eyeOpen *= 1 - cat.blink;
+  q.earFlick = Math.max(q.earFlick, cat.earFlick);
+
+  // живость: в спокойных позах осматривается, на ходу покачивается
+  if (["idle","sit","loaf","sit_on_icon","unimpressed","sniff","stretch","watch_cursor"].includes(s)) {
+    q.headDx += cat.lookX*.8; q.headDy += cat.lookY*.8;
+  }
+  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl"].includes(s)) {
+    q.headDy += Math.sin(cat.walkPhase*.5)*1.3;
+    q.dy += Math.sin(cat.walkPhase)*.9;
+    q.headDx += Math.sin(cat.walkPhase*.5 + 1)*.8;
+  }
+  if (s === "idle" || s === "sit") q.breathe += Math.sin(now/1300)*.6;
+
+  if (mouse.inside && !["sleep","hidden"].includes(s)) {
+    const dx = clamp((mouse.x-cat.x)/180,-1,1), dy = clamp((mouse.y-cat.y+50)/180,-1,1);
+    const w = ["watch_cursor","chase_cursor","grab_cursor"].includes(s) ? 3.2 : 1.8;
+    const f = cat.faceCur >= 0 ? 1 : -1;
+    q.pdx = dx*w*f; q.pdy = dy*w;
+    if (s === "watch_cursor") {
+      q.sit = 1; q.headDx = dx*5; q.headDy = dy*3;
+      if (dx*f < -.45) cat.facing = -cat.facing;
+    }
+  }
+  return q;
+}
+
+/* ---------- сцена: фон, окно, миски ---------- */
+function roundRect(x,y,w,h,r){ ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function drawDesktop(){
+  const g = ctx.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,"#1b2a3a"); g.addColorStop(.55,"#223243"); g.addColorStop(1,"#2b2530");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha = .1; ctx.fillStyle = "#7fb5d8";
+  for (let i=0;i<5;i++){ ctx.beginPath(); ctx.arc(W*.2+i*130, H*.9+i*22, 240, 0, Math.PI*2); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  ICONS.forEach((ic,i) => {
+    const sh = Math.sin(ic.shake*22)*ic.shake*7;
+    ctx.save(); ctx.translate(ic.x+sh, ic.y);
+    ctx.fillStyle = ["#5b9bd5","#e8b14c","#6fbf8b","#d3766f","#9a8fd0","#7fb5b5"][i%6];
+    roundRect(-42,-42,84,84,16); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.75)"; roundRect(-22,-20,44,10,5); ctx.fill();
+    roundRect(-22,-2,30,10,5); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.82)"; ctx.font = "22px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("Файл " + (i+1), 0, 68);
+    ctx.restore();
+  });
+  ctx.fillStyle = "rgba(12,14,18,.72)"; ctx.fillRect(0,H-52,W,52);
+  for (let i=0;i<4;i++){ ctx.fillStyle = "rgba(255,255,255,.22)"; roundRect(24+i*56,H-40,36,28,7); ctx.fill(); }
+}
+
+function drawWindow(){
+  const r = WINDOW_RECT;
+  ctx.save(); ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 12;
+  ctx.fillStyle = "#f4f2ee"; roundRect(r.x,r.y,r.w,r.h,16); ctx.fill(); ctx.restore();
+  ctx.fillStyle = "#e2ded6"; roundRect(r.x,r.y,r.w,44,16); ctx.fill();
+  ["#e06c60","#e3b341","#63b76c"].forEach((c,i) => {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(r.x+28+i*26, r.y+22, 8, 0, Math.PI*2); ctx.fill(); });
+  ctx.fillStyle = "#ccc7be";
+  for (let i=0;i<7;i++) { roundRect(r.x+30, r.y+74+i*36, r.w*(i%3===0?.7:.45), 14, 7); ctx.fill(); }
+}
+
+function drawBowls(){
+  bowls.forEach(b => {
+    ctx.save(); ctx.globalAlpha = clamp(b.life/3, 0, 1);
+    const w = 96, h = 38, rimY = b.y - h;
+    const shell = b.kind === "water" ? "#9cc6dc" : "#dcab6e";
+
+    ctx.fillStyle = "rgba(0,0,0,.3)";
+    ctx.beginPath(); ctx.ellipse(b.x, b.y + 5, w*.40, 6, 0, 0, Math.PI*2); ctx.fill();
+
+    // корпус миски
+    ctx.fillStyle = shell; ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(b.x - w/2, rimY);
+    ctx.quadraticCurveTo(b.x - w*.46, b.y + 2, b.x - w*.20, b.y + 4);
+    ctx.lineTo(b.x + w*.20, b.y + 4);
+    ctx.quadraticCurveTo(b.x + w*.46, b.y + 2, b.x + w/2, rimY);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // полость
+    ctx.fillStyle = shade(shell, .70);
+    ctx.beginPath(); ctx.ellipse(b.x, rimY, w*.47, h*.30, 0, 0, Math.PI*2); ctx.fill();
+
+    // содержимое
+    if (b.level > .05) {
+      if (b.kind === "water") {
+        const rw = w*.44*(.55+.45*b.level), rh = h*.26*(.55+.45*b.level);
+        const wy = rimY + (1-b.level)*6;
+        ctx.fillStyle = "#5aa4d4";
+        ctx.beginPath(); ctx.ellipse(b.x, wy, rw, rh, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,.4)";
+        ctx.beginPath(); ctx.ellipse(b.x - rw*.32, wy - rh*.3, rw*.3, rh*.32, 0, 0, Math.PI*2); ctx.fill();
+        if (b.ripple > 0) {
+          ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2;
+          for (const mul of [1, .6]) {
+            const k2 = clamp((1-b.ripple)*mul, 0, 1);
+            ctx.beginPath();
+            ctx.ellipse(b.x, wy, rw*(.2+.75*k2), rh*(.2+.75*k2), 0, 0, Math.PI*2);
+            ctx.stroke();
+          }
+        }
+      } else {
+        const n = Math.max(5, Math.round(12*b.level));
+        ctx.fillStyle = "#7d4f24";
+        ctx.beginPath();
+        ctx.ellipse(b.x, rimY + 2, w*.40*(.55+.45*b.level), h*.22*(.55+.45*b.level), 0, 0, Math.PI*2);
+        ctx.fill();
+        for (let i=0;i<n;i++){
+          const a = i*2.399, rr = Math.sqrt((i+.4)/n)*w*.33*(.55+.45*b.level);
+          ctx.fillStyle = ["#b8783a","#a4682f","#c98a49"][i%3];
+          ctx.strokeStyle = "rgba(60,32,10,.35)"; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(b.x + Math.cos(a)*rr,
+                      rimY - 1 + Math.sin(a)*rr*.3 - (1-Math.sqrt((i+.4)/n))*5*b.level,
+                      6.4, 5, a, 0, Math.PI*2);
+          ctx.fill(); ctx.stroke();
+        }
+      }
+    }
+
+    // передний край поверх содержимого — видно, что корм и вода лежат в миске
+    ctx.strokeStyle = shell; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.ellipse(b.x, rimY, w*.47, h*.30, 0, .04*Math.PI, .96*Math.PI); ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,.22)"; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(b.x, rimY, w*.47, h*.30, 0, .04*Math.PI, .96*Math.PI); ctx.stroke();
+    ctx.restore();
+  });
+}
+
+/* ---------- кот ---------- */
+function geom(q){
+  const loaf = Math.max(q.loaf, q.hang), sit = q.sit*(1-loaf), arch = q.arch + q.fluff*.3;
+  let length = {slim:52,normal:55,chonky:60}[CAT.build] ?? 55;
+  let height = {slim:31,normal:34,chonky:38}[CAT.build] ?? 34;
+  if (CAT.fur === "long") height += 3;
+  if (CAT.hairless) { height -= 3; length += 3; }          // сфинкс суше и длиннее
+  height += q.breathe;
+  if (loaf > .3) { length -= 5*loaf + 4*q.curl; height += 3*loaf; }
+  if (q.turnIn) length *= 1 - .17*q.turnIn;     // корпус развёрнут к зрителю — короче в профиль
+  const dome = loaf > .3 ? 4*loaf : 0;           // в буханке самая высокая точка — бедро
+  if (q.flat) height *= 1 - .20*q.flat;          // лежит — корпус ниже
+  if (q.onBack) { length *= 1.14; height *= .94; }
+  if (q.stretchBody) { length *= 1.18; height *= .90; }
+  height *= 1 - q.squash*.16;
+  const legK = {short: .55, normal: 1, long: 1.28}[CAT.legs] ?? 1;
+  const leg = Math.max(0, 14.5*legK*(1-loaf)*(1-q.crouch*.55)*(1-q.squash*.45) + q.air*3);
+  const byF = -leg, byR = -leg + sit*(leg-3);
+  return {rear:-length*.55, front:length*.45, byR, byF,
+          tyF: byF - height + q.sag*5, tyR: byR - height*.95 - arch*5 - dome,
+          height, arch, sit, loaf};
+}
+function bodyPath(g){
+  const backY = lerp(g.tyR, g.tyF, .45) - g.arch*11;
+  ctx.beginPath();
+  ctx.moveTo(g.rear+2, g.byR);
+  ctx.quadraticCurveTo(g.rear-9, lerp(g.byR,g.tyR,.45), g.rear-3, g.tyR + g.height*.10);
+  ctx.quadraticCurveTo(g.rear + (g.front-g.rear)*.34, backY, g.front-7, g.tyF+1);
+  ctx.quadraticCurveTo(g.front+9, g.tyF + g.height*.45, g.front+6, g.byF-2);
+  ctx.quadraticCurveTo(g.front+2, g.byF+1, g.front-6, g.byF);
+  ctx.lineTo(g.rear+2, g.byR);
+  ctx.closePath();
+}
+const pawFill = () => CAT.pattern === "point" ? CAT.pc
+  : (CAT.extras.includes("white_socks") ? CAT.belly
+  : (CAT.extras.includes("tan_points") ? CAT.tan : CAT.base));
+
+function drawLashes(ex, ey, ew, eh, near){
+  // три коротких реснички у внешнего верхнего края глаза
+  ctx.strokeStyle = near ? "rgba(40,34,38,.85)" : "rgba(40,34,38,.5)";
+  ctx.lineWidth = near ? 1.4 : 1.1; ctx.lineCap = "round";
+  for (let i=0;i<3;i++){
+    const t = i/2;
+    const bx = ex + lerp(ew*.15, ew*.95, t), by = ey - eh*(.95 - t*.35);
+    ctx.beginPath(); ctx.moveTo(bx, by);
+    ctx.quadraticCurveTo(bx + 1.6 + t*1, by - 2.4, bx + 2.6 + t*1.5, by - 3.6);
+    ctx.stroke();
+  }
+}
+
+function drawLeg(x, yTop, off, lift = 0){
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x, yTop+1);
+  ctx.quadraticCurveTo(x + off*.5, yTop*.45 - lift*.4, x + off, -lift);
+  ctx.strokeStyle = INK; ctx.lineWidth = 10 + LW*1.0; ctx.stroke();
+  ctx.strokeStyle = CAT.base; ctx.lineWidth = 10; ctx.stroke();
+  ctx.fillStyle = pawFill(); ctx.strokeStyle = INK; ctx.lineWidth = LW*.55;
+  ctx.beginPath(); ctx.ellipse(x+off, -2 - lift, 7, 3.6, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+}
+
+const INK = mixc(shade(A.base_color, .26), "#121013", .72);
+const LW = 3.2;
+
+function drawCat(q){
+  const k = CAT.scale, g = geom(q);
+  const fSign = cat.faceCur >= 0 ? 1 : -1;
+  let sx = cat.faceCur;
+  if (Math.abs(sx) < .14) sx = .14*fSign;
+  const turnLift = (1 - Math.abs(clamp(cat.faceCur,-1,1)))*3;
+
+  ctx.save();
+  ctx.translate(cat.x + q.lean, cat.y + (q.dy - turnLift)*k);
+  ctx.scale(sx*k, k);
+  ctx.lineJoin = "round";
+  // точка, которой кот держится за курсор (передние лапы)
+  const gripX = g.front + 28.5, gripY = g.tyF - 23;
+  if (q.hang > .5) cat.gripLocal = {x: gripX, y: gripY};
+  if (q.roll) { ctx.translate(gripX, gripY); ctx.rotate(-q.roll); ctx.translate(-gripX, -gripY); }
+
+  // хвост
+  const tl = {long:54,fluffy:48,short:30,bobtail:15}[CAT.tail] ?? 54;
+  let tw = {long:7,fluffy:13,short:8,bobtail:11}[CAT.tail] ?? 7;
+  if (CAT.fur === "long") tw += 3; tw += q.fluff*8; tw += 2.5;
+  if (CAT.hairless) tw = Math.max(3.5, tw - 5.5);
+  const tx0 = g.rear+3, ty0 = g.byR - g.height*.62;
+  const tp = [[tx0, ty0]];
+  for (let i=1;i<=6;i++){
+    const t = i/6;
+    const hook = q.tailAngle > .55 ? Math.max(0, t - .62)/.38 * .85 * q.tailAngle : 0;
+    const a = q.tailAngle*(.55+.75*t) + q.tailWave*.3*Math.sin(t*Math.PI)
+              + q.tailWhip*t - q.curl*1.1*t + q.tailTip*t*t*1.6 + hook;
+    tp.push([tx0 - Math.cos(a)*tl*t*(1-q.curl*.25),
+             ty0 - Math.sin(a)*tl*t - Math.sin(t*Math.PI)*7]);
+  }
+  ctx.lineCap = "round";
+  const tailPass = (color, extra) => {
+    for (let i=1;i<tp.length;i++){
+      const t = i/(tp.length-1);
+      ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, tw*(1 - t*.40) + extra);
+      ctx.beginPath(); ctx.moveTo(tp[i-1][0], tp[i-1][1]);
+      ctx.lineTo(tp[i][0], tp[i][1]); ctx.stroke();
+    }
+  };
+  tailPass(INK, LW*1.5);
+  tailPass(CAT.base, 0);
+  if (CAT.extras.includes("white_tail_tip")) {
+    ctx.strokeStyle = CAT.belly; ctx.beginPath();
+    ctx.moveTo(tp[5][0], tp[5][1]); ctx.lineTo(tp[6][0], tp[6][1]); ctx.stroke();
+  }
+  if (["tabby","mackerel","spotted"].includes(CAT.pattern)) {
+    ctx.strokeStyle = CAT.pc; ctx.lineWidth = 3;
+    [3,5].forEach(i => {
+      const [ax,ay] = tp[i-1], [bx,by] = tp[i];
+      let nx = -(by-ay), ny = bx-ax; const n = Math.hypot(nx,ny) || 1;
+      nx = nx/n*tw*.48; ny = ny/n*tw*.48;
+      ctx.beginPath(); ctx.moveTo((ax+bx)/2-nx, (ay+by)/2-ny);
+      ctx.lineTo((ax+bx)/2+nx, (ay+by)/2+ny); ctx.stroke();
+    });
+  }
+
+  // задние лапы
+  const swing = g.sit > .5 ? 0 : 5 + 13*q.gallop;
+  const bound = q.gallop > .5;           // в галопе лапы работают парами
+  // обычный шаг — четырёхтактный: лапы переступают по очереди и приподнимаются;
+  // в галопе в фазе полёта они разлетаются, при приземлении собираются под корпус
+  const legAt = (i, front) => q.legPhase + (front ? (i ? Math.PI*1.5 : Math.PI*.5)
+                                                  : (i ? Math.PI : 0));
+  const hindOff = i => bound ? -Math.sin(q.legPhase)*swing*(i ? 1 : .85)
+                             : Math.sin(legAt(i, false))*swing;
+  const frontOff = i => bound ? Math.sin(q.legPhase)*swing*(i ? 1 : .8)
+                              : Math.sin(legAt(i, true))*swing;
+  const liftOf = (i, front) => bound ? 0 : Math.max(0, Math.cos(legAt(i, front)))*3.6;
+  if (g.loaf < .5 && g.sit < .5) {
+    drawLeg(g.rear+13, g.byR, hindOff(0) - q.air*6, liftOf(0, false));
+    drawLeg(g.rear+23, g.byR, hindOff(1) - q.air*9, liftOf(1, false));
+  } else if (g.loaf < .5) {
+    ctx.fillStyle = CAT.base; ctx.strokeStyle = INK; ctx.lineWidth = LW*.55;
+    ctx.beginPath(); ctx.ellipse(g.rear+17, -3, 11.5, 4, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  }
+
+  // корпус, живот, бедро
+  ctx.fillStyle = CAT.base; ctx.strokeStyle = INK; ctx.lineWidth = LW;
+  bodyPath(g); ctx.fill(); ctx.stroke();
+  if (q.onBack > .5) {
+    // на спине светлое брюхо оказывается сверху
+    ctx.fillStyle = CAT.belly; ctx.beginPath();
+    ctx.moveTo(g.rear + 6, g.tyR + 4);
+    ctx.quadraticCurveTo(lerp(g.rear, g.front, .5), g.tyR - 4, g.front + 4, g.tyF + 3);
+    ctx.quadraticCurveTo(lerp(g.rear, g.front, .55), lerp(g.tyR, g.tyF, .5) + g.height*.78,
+                         g.rear + 6, g.tyR + 4);
+    ctx.closePath(); ctx.fill();
+  } else {
+  ctx.fillStyle = CAT.belly; ctx.beginPath();
+  ctx.moveTo(g.rear + 22, g.byR - 1);
+  ctx.quadraticCurveTo(lerp(g.rear, g.front, .66), lerp(g.byR, g.byF, .6) - g.height*.24,
+                       g.front + 3, g.byF - g.height*.42);
+  ctx.quadraticCurveTo(g.front + 7, g.byF - g.height*.18, g.front + 3, g.byF - 1.5);
+  ctx.lineTo(g.rear + 20, g.byF + .5); ctx.closePath(); ctx.fill();
+  }
+  if (g.loaf < .5) {
+    // бедро: объём, слитый с корпусом, + одна складка вместо обводки-шара
+    const hh = g.height;
+    ctx.fillStyle = CAT.base;
+    ctx.beginPath();
+    ctx.ellipse(g.rear + 14, g.byR - hh*.34, hh*.40, hh*.46, -.45, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = shade(CAT.base, .66); ctx.lineWidth = LW*.38; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(g.rear + 3, g.byR - hh*.80);
+    ctx.quadraticCurveTo(g.rear + 20, g.byR - hh*.54, g.rear + 22, g.byR - hh*.08);
+    ctx.stroke();
+  }
+
+  // окрас (на спине полосы ушли бы на брюхо — пропускаем)
+  if (q.onBack < .5) {
+  ctx.save(); bodyPath(g); ctx.clip();
+  const backAt = t => lerp(g.tyR, g.tyF, t) - g.arch*9*Math.sin(t*Math.PI);
+  if (CAT.pattern === "tabby" || CAT.pattern === "mackerel") {
+    const n = CAT.pattern === "tabby" ? 4 : 6;
+    ctx.strokeStyle = CAT.pc; ctx.lineWidth = CAT.pattern === "tabby" ? 4 : 2.6; ctx.lineCap = "round";
+    for (let i=0;i<n;i++){
+      const t = .2 + i*(.58/Math.max(1,n-1)), x = lerp(g.rear,g.front,t), y = backAt(t);
+      ctx.beginPath(); ctx.moveTo(x+2, y+2); ctx.lineTo(x-3, y + g.height*.6); ctx.stroke();
+    }
+  } else if (CAT.pattern === "spotted") {
+    ctx.fillStyle = CAT.pc;
+    for (let i=0;i<6;i++){
+      const t = .18+(i%3)*.26, x = lerp(g.rear,g.front,t), y = backAt(t)+8+Math.floor(i/3)*12;
+      ctx.beginPath(); ctx.ellipse(x,y,4.5,3.5,0,0,Math.PI*2); ctx.fill();
+    }
+  } else if (CAT.pattern === "tortie" || CAT.pattern === "calico") {
+    ctx.fillStyle = CAT.pc;
+    [[.2,7,13,10],[.52,12,15,11],[.78,5,11,9]].forEach(([t,oy,w,h]) => {
+      ctx.beginPath(); ctx.ellipse(lerp(g.rear,g.front,t), backAt(t)+oy, w/2, h/2, 0, 0, Math.PI*2);
+      ctx.fill(); });
+  }
+  ctx.restore();
+  }
+  if (q.onBack < .5 && CAT.extras.includes("tan_points") && !CAT.extras.includes("chest_spot")) {
+    ctx.fillStyle = CAT.tan; ctx.beginPath();
+    ctx.ellipse(g.front+5, g.byF - g.height*.40, 4.5, 8, 0, 0, Math.PI*2); ctx.fill();
+  }
+  if (q.onBack < .5 && CAT.extras.includes("chest_spot")) {
+    ctx.fillStyle = CAT.belly; ctx.beginPath();
+    ctx.ellipse(g.front+5, g.byF - g.height*.42, 4, 8, 0, 0, Math.PI*2); ctx.fill();
+  }
+
+  // у кота под самым хвостом; заметно только когда он повернулся спиной
+  const backTurn = clamp((.55 - Math.abs(cat.faceCur))/.55, 0, 1);
+  if (CAT.sex === "male" && backTurn > .1 && g.loaf < .4 && q.hang < .5) {
+    ctx.fillStyle = shade(CAT.base, .9);
+    ctx.strokeStyle = INK; ctx.lineWidth = LW*.3;
+    for (let i=0;i<2;i++){
+      ctx.beginPath();
+      ctx.ellipse(g.rear - 1 + i*3.2, g.byR + 1.4 + i*.5,
+                  2.6 + backTurn*.8, 2.4 + backTurn*.6, .1, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // передние лапы / буханка / висение
+  if (g.loaf < .5) {
+    drawLeg(g.front-19, g.byF, frontOff(0) + q.air*7, liftOf(0, true));
+    // при умывании одну переднюю лапу кот держит у морды — на земле остаётся одна
+    if (!["groom","paw_icon"].includes(cat.state))
+      drawLeg(g.front-9, g.byF, frontOff(1) + q.air*11, liftOf(1, true));
+    if (q.paw > .05 && !["groom","paw_icon"].includes(cat.state)) {
+      const px = g.front + 4 + 20*q.paw, py = g.byF - 6 - 18*q.paw;
+      ctx.strokeStyle = CAT.base; ctx.lineWidth = 8; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(g.front-4, g.byF-2); ctx.lineTo(px, py); ctx.stroke();
+      ctx.fillStyle = pawFill(); ctx.beginPath();
+      ctx.ellipse(px, py-1, 5.5, 3.5, 0, 0, Math.PI*2); ctx.fill();
+      if (cat.state === "paw_icon") {
+        ctx.strokeStyle = shade(CAT.base,.5); ctx.lineWidth = 1.6;
+        for (let i=0;i<2;i++){ ctx.beginPath(); ctx.moveTo(px+9+i*5, py-5-i*4);
+          ctx.lineTo(px+15+i*5, py-8-i*4); ctx.stroke(); }
+      }
+    }
+  } else if (q.hang > .5) {
+    // задние лапы болтаются; передние нарисуем поверх головы, у самого курсора
+    ctx.lineCap = "round"; ctx.strokeStyle = CAT.base; ctx.lineWidth = 7;
+    for (let i=0;i<2;i++){
+      const rx = g.rear + 13 + i*11;
+      ctx.beginPath(); ctx.moveTo(rx, g.byR-2);
+      ctx.quadraticCurveTo(rx-2, g.byR+9, rx-4 + Math.sin(q.legPhase+i*1.3)*4, g.byR+19);
+      ctx.stroke();
+      ctx.fillStyle = pawFill(); ctx.beginPath();
+      ctx.ellipse(rx-4 + Math.sin(q.legPhase+i*1.3)*4, g.byR+20, 4.6, 3.4, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  } else {
+    const pf = pawFill();
+    if (q.onBack > .5) {
+      // лапки поджаты кверху — рисуем их после корпуса
+    } else {
+      // буханка: задняя лапа выглядывает у бедра
+      ctx.fillStyle = shade(pf,.92); ctx.strokeStyle = INK; ctx.lineWidth = LW*.5;
+      ctx.beginPath(); ctx.ellipse(g.rear + 13, g.byR - 2.2, 9, 4.6, -.05, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = INK; ctx.lineWidth = LW*.35;
+      for (let i=0;i<2;i++){
+        ctx.beginPath(); ctx.moveTo(g.rear + 15 + i*3.2, g.byR - 5);
+        ctx.lineTo(g.rear + 15.4 + i*3.2, g.byR - .4); ctx.stroke();
+      }
+      // передние лапки подвёрнуты под грудь: две рядом, кот чуть развёрнут к нам
+      const cx0 = g.front - 3;
+      for (let i=0;i<2;i++){
+        const px = cx0 + i*9.5, py = g.byF - 2.2 - (1-i)*1.4;
+        ctx.fillStyle = i ? pf : shade(pf,.9);
+        ctx.strokeStyle = INK; ctx.lineWidth = LW*.45;
+        ctx.beginPath(); ctx.ellipse(px, py, 7.4, 4.6, -.03, 0, Math.PI*2);
+        ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = INK; ctx.lineWidth = LW*.3;
+        for (let t=0;t<2;t++){
+          ctx.beginPath(); ctx.moveTo(px - 1.5 + t*3, py - 4.2);
+          ctx.lineTo(px - 1.3 + t*3, py - .4); ctx.stroke();
+        }
+      }
+      // грудь нависает над лапами — лапы явно уходят под корпус
+      ctx.fillStyle = CAT.belly; ctx.beginPath();
+      ctx.moveTo(g.front - 15, g.byF - 14);
+      ctx.quadraticCurveTo(g.front + 10, g.byF - 13, g.front + 9, g.byF - 6.4);
+      ctx.quadraticCurveTo(g.front - 3, g.byF - 9.5, g.front - 16, g.byF - 7.5);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // голова (с наклоном)
+  const FK = {
+    round: {rx: 1.00, muz: [.10, .44, .80, .38], nose: .34, ear: 1.00},
+    flat:  {rx: 1.08, muz: [.02, .34, .70, .32], nose: .22, ear: .85},
+    wedge: {rx: .92,  muz: [.22, .46, .88, .32], nose: .42, ear: 1.15},
+  }[CAT.face] || {rx: 1, muz: [.10, .44, .80, .38], nose: .34, ear: 1};
+  const r = 19 + (CAT.fur === "long" ? 2 : 0) + (CAT.build === "chonky" ? 1.5 : 0)
+            + (CAT.face === "flat" ? 1.5 : 0);
+  const hx = g.front + 5 - 5*q.turnIn + q.headDx,
+        hy = g.tyF - r*.16 + q.headDy + g.loaf*8 + q.hang*5;
+  ctx.save();
+  // мультяшная пропорция: голова крупнее, растём вокруг места посадки на корпус
+  const HS = 1.45, jx = hx - r*.98, jy = hy + r*.62;
+  ctx.translate(jx, jy); ctx.scale(HS, HS); ctx.translate(-jx, -jy);
+  // на спине морда смотрит назад, к лапам: голову отражаем
+  if (q.onBack > .5) { ctx.translate(hx, hy); ctx.scale(-1, 1); ctx.translate(-hx, -hy); }
+  ctx.translate(hx, hy); ctx.rotate(q.headTilt); ctx.translate(-hx, -hy);
+
+  const ff = q.faceFront;
+  const earH = ({large:21,tufted:19,folded:8,normal:16}[CAT.ear] ?? 16)
+               * FK.ear * (CAT.hairless && CAT.ear !== "folded" ? 1.35 : 1);
+  [[-1,-10.5 - 6*ff],[1,8 + 1.5*ff]].forEach(([side,ox],idx) => {
+    const flick = idx === 1 ? q.earFlick*Math.sin(performance.now()/45)*.5 : 0;
+    const tipX = hx+ox+side*2 - q.earDroop*6*side + flick*8;
+    const tipY = hy - r*.7 - earH*(1-q.earDroop*.7) + (CAT.ear === "folded" ? 4 : 0)
+                 + Math.abs(flick)*3;
+    ctx.fillStyle = CAT.base; ctx.strokeStyle = INK; ctx.lineWidth = LW*.85;
+    ctx.beginPath(); ctx.moveTo(hx+ox-5.5, hy-r*.5); ctx.lineTo(tipX, tipY);
+    if (idx === 1 && CAT.extras.includes("notched_ear")) {
+      // рваное ухо: треугольная выемка на внешнем крае
+      const bx = hx+ox+6, by = hy-r*.55;
+      ctx.lineTo(lerp(tipX,bx,.30), lerp(tipY,by,.30));
+      ctx.lineTo(lerp(tipX,bx,.42) - 4.2, lerp(tipY,by,.42) + 1.2);
+      ctx.lineTo(lerp(tipX,bx,.56), lerp(tipY,by,.56));
+    }
+    ctx.lineTo(hx+ox+6, hy-r*.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = CAT.inner; ctx.beginPath();
+    ctx.moveTo(hx+ox-2.5, hy-r*.54);
+    ctx.lineTo(lerp(hx+ox,tipX,.72), lerp(hy-r*.55,tipY,.7));
+    ctx.lineTo(hx+ox+3.5, hy-r*.56); ctx.closePath(); ctx.fill();
+    if (CAT.ear === "tufted") { ctx.strokeStyle = CAT.base; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(tipX,tipY); ctx.lineTo(tipX+side*3, tipY-7); ctx.stroke(); }
+  });
+
+  ctx.fillStyle = CAT.base; ctx.strokeStyle = INK; ctx.lineWidth = LW;
+  ctx.beginPath();
+  ctx.ellipse(hx - r*.12*ff, hy + r*.02, r*FK.rx*(1 + .13*ff), r*.88, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.stroke();
+  if (CAT.extras.includes("pirate_hat")) {
+    // пиратская треуголка с черепом, чуть набекрень
+    const cx = hx - r*.12*ff, top = hy - r*.62;
+    ctx.save(); ctx.translate(cx, top); ctx.rotate(-.12); ctx.translate(-cx, -top);
+    ctx.fillStyle = "#26232a"; ctx.strokeStyle = INK; ctx.lineWidth = LW*.8; ctx.lineJoin = "round";
+    // тулья
+    ctx.beginPath();
+    ctx.moveTo(cx - r*.78, top);
+    ctx.quadraticCurveTo(cx - r*.55, top - r*.72, cx, top - r*.78);
+    ctx.quadraticCurveTo(cx + r*.55, top - r*.72, cx + r*.78, top);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // поля с загнутыми краями
+    ctx.beginPath();
+    ctx.moveTo(cx - r*1.22, top - r*.30);
+    ctx.quadraticCurveTo(cx - r*1.0, top + r*.14, cx - r*.55, top + r*.10);
+    ctx.quadraticCurveTo(cx, top + r*.20, cx + r*.55, top + r*.10);
+    ctx.quadraticCurveTo(cx + r*1.0, top + r*.14, cx + r*1.22, top - r*.30);
+    ctx.quadraticCurveTo(cx + r*.9, top - r*.14, cx + r*.6, top - r*.10);
+    ctx.quadraticCurveTo(cx, top - r*.26, cx - r*.6, top - r*.10);
+    ctx.quadraticCurveTo(cx - r*.9, top - r*.14, cx - r*1.22, top - r*.30);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // череп с костями
+    const sy = top - r*.40;
+    ctx.strokeStyle = "#f2efe6"; ctx.lineWidth = r*.06; ctx.lineCap = "round";
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([dx,dy]) => {
+      ctx.beginPath(); ctx.moveTo(cx + dx*r*.10, sy + dy*r*.08); ctx.lineTo(cx + dx*r*.30, sy + dy*r*.22); ctx.stroke(); });
+    ctx.fillStyle = "#f2efe6";
+    ctx.beginPath(); ctx.ellipse(cx, sy - r*.02, r*.19, r*.17, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(cx - r*.10, sy + r*.10, r*.20, r*.09);
+    ctx.fillStyle = "#26232a";
+    ctx.beginPath(); ctx.ellipse(cx - r*.07, sy - r*.03, r*.05, r*.055, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r*.07, sy - r*.03, r*.05, r*.055, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(cx - r*.035, sy + r*.11, r*.02, r*.08); ctx.fillRect(cx + r*.015, sy + r*.11, r*.02, r*.08);
+    ctx.restore();
+  }
+  ctx.fillStyle = CAT.extras.includes("white_muzzle") ? CAT.belly : shade(CAT.base,1.10);
+  ctx.beginPath();
+  ctx.ellipse(hx + r*(FK.muz[0] - .22*ff), hy + r*FK.muz[1],
+              r*(FK.muz[2] + .06*ff), r*FK.muz[3], 0, 0, Math.PI*2);
+  ctx.fill();
+  if (CAT.pattern === "point") { ctx.fillStyle = CAT.pc;
+    ctx.beginPath(); ctx.ellipse(hx + r*.36, hy + r*.38, r*.62, r*.48, 0, 0, Math.PI*2); ctx.fill(); }
+  if (CAT.pattern === "tabby" || CAT.pattern === "mackerel") {
+    // фирменная «M» табби на лбу
+    ctx.strokeStyle = CAT.pc; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    const mx0 = hx - 2*ff;
+    ctx.beginPath();
+    ctx.moveTo(mx0 - 10, hy - r*.36); ctx.lineTo(mx0 - 6.5, hy - r*.80);
+    ctx.lineTo(mx0 + .5, hy - r*.50); ctx.lineTo(mx0 + 7.5, hy - r*.80);
+    ctx.lineTo(mx0 + 11, hy - r*.36); ctx.stroke();
+  }
+  if (CAT.extras.includes("tan_points")) {
+    // подпалины: точки над глазами и щёки
+    ctx.fillStyle = CAT.tan;
+    [[hx - 6.5 - 3.4*ff, hy - r*.55], [hx + 7.5 - 1.2*ff, hy - r*.55]].forEach(([x,y]) => {
+      ctx.beginPath(); ctx.ellipse(x, y, 2.6, 2.0, 0, 0, Math.PI*2); ctx.fill(); });
+    ctx.beginPath(); ctx.ellipse(hx + r*.62 - 3*ff, hy + r*.30, r*.30, r*.34, .3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx - r*.62 - 3*ff, hy + r*.30, r*.22, r*.30, -.3, 0, Math.PI*2); ctx.fill();
+  }
+  if (CAT.extras.includes("scar")) {
+    // шрам через ближний глаз: косая линия и три поперечных стежка; глаз рисуется поверх
+    const sx0 = hx + 3.5 - 1.2*ff, sy0 = hy - r*.78, sx1 = hx + 12 - 1.2*ff, sy1 = hy + r*.40;
+    // на тёмной шерсти шрам светлый (кожа), на светлой — тёмный
+    const [br, bg, bb] = hex2rgb(CAT.base);
+    ctx.strokeStyle = (br*.3 + bg*.59 + bb*.11) < 110 ? mixc(CAT.base, "#e9d6c9", .55) : shade(CAT.base, .5);
+    ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.lineTo(sx1, sy1); ctx.stroke();
+    ctx.lineWidth = 1.3;
+    [.12, .28, .84].forEach(t => {
+      const x = lerp(sx0, sx1, t), y = lerp(sy0, sy1, t);
+      ctx.beginPath(); ctx.moveTo(x - 2.6, y - .9); ctx.lineTo(x + 2.6, y + .9); ctx.stroke();
+    });
+  }
+
+  // глаза
+  const eo = q.eyeOpen*(1-q.squint*.55), ey = hy - r*.02;
+  [[hx - 6.5 - 3.4*ff, 0],[hx + 7.5 - 1.2*ff, 1]].forEach(([ex,idx]) => {
+    const ew = 7.0, eh = 7.9*Math.max(.05, eo);
+    if (eo < .14) {
+      ctx.strokeStyle = shade(CAT.base,.42); ctx.lineWidth = 1.9; ctx.lineCap = "round";
+      ctx.beginPath();
+      if (q.happy > .5) { ctx.moveTo(ex-ew, ey+1.2); ctx.quadraticCurveTo(ex, ey-3.4, ex+ew, ey+1.2); }
+      else { ctx.moveTo(ex-ew, ey); ctx.lineTo(ex+ew, ey); }
+      ctx.stroke();
+      if (CAT.sex === "female") drawLashes(ex, ey, ew, 1.6, idx === 1);
+      return;
+    }
+    const iris = (CAT.extras.includes("heterochromia") && idx) ? CAT.eye2 : CAT.eye;
+    const col = mixc(iris, "#fdf7d2", .26);
+    const pdx = clamp(q.pdx,-2.2,2.2), pdy = clamp(q.pdy,-1.8,1.8);
+    ctx.fillStyle = col; ctx.strokeStyle = INK; ctx.lineWidth = LW*.45;
+    ctx.beginPath(); ctx.ellipse(ex, ey, ew, eh, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    // анимешная радужка: тень сверху, свет снизу, зрачок, два блика
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(ex, ey, ew, eh, 0, 0, Math.PI*2); ctx.clip();
+    ctx.fillStyle = mixc(col, "#ffffff", .45);
+    ctx.beginPath(); ctx.ellipse(ex, ey + eh*.58, ew*.98, eh*.62, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = mixc(iris, "#1f2418", .42);
+    ctx.beginPath(); ctx.ellipse(ex, ey - eh*.78, ew*1.06, eh*.56, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#17151a";
+    ctx.beginPath();
+    ctx.ellipse(ex+pdx, ey+pdy, (1.5+2.1*q.pupil)/2, eh*.50, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.ellipse(ex + ew*.34 + pdx, ey - eh*.40 + pdy, ew*.25, eh*.19, -.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = .7;
+    ctx.beginPath();
+    ctx.ellipse(ex - ew*.34 + pdx, ey + eh*.42 + pdy, ew*.16, eh*.12, .3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // верхнее веко — жирная дуга, как в аниме
+    ctx.strokeStyle = INK; ctx.lineWidth = LW*.8; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, ew*1.02, eh*1.0, 0, -.95*Math.PI, -.10*Math.PI); ctx.stroke();
+    if (CAT.sex === "female") drawLashes(ex, ey, ew, eh, idx === 1);
+    if (q.squint > .35) {
+      ctx.fillStyle = CAT.base; ctx.beginPath();
+      ctx.ellipse(ex, ey - eh - eh*(1-q.squint)*.2, ew+1.2, eh*q.squint*.75, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  });
+
+  // нос, рот, язык, усы, ошейник
+  const ny = hy + r*FK.nose, nx = -5.4*ff;
+  ctx.fillStyle = CAT.nose; ctx.beginPath();
+  ctx.moveTo(hx+1.5+nx, ny-2); ctx.lineTo(hx+6.5+nx, ny-2); ctx.lineTo(hx+4+nx, ny+1.6);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = shade(CAT.base,.4); ctx.lineWidth = 1.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(hx+4+nx, ny+1.6); ctx.lineTo(hx+4+nx, ny+4.2); ctx.stroke();
+  if (q.mouthOpen > .05) {
+    const mo = q.mouthOpen, mx = hx + 4 + nx;
+    ctx.fillStyle = "#2f1d22"; ctx.strokeStyle = INK; ctx.lineWidth = LW*.4;
+    ctx.beginPath();
+    ctx.moveTo(mx - 6.8, ny + 4.2);
+    ctx.quadraticCurveTo(mx - 3.2, ny + 6.6, mx, ny + 5.2);
+    ctx.quadraticCurveTo(mx + 3.2, ny + 6.6, mx + 6.8, ny + 4.2);
+    ctx.quadraticCurveTo(mx + 4, ny + 9.5 + 9*mo, mx, ny + 10 + 10*mo);
+    ctx.quadraticCurveTo(mx - 4, ny + 9.5 + 9*mo, mx - 6.8, ny + 4.2);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#e88b9b";
+    ctx.beginPath();
+    ctx.ellipse(mx, ny + 7.5 + 6.5*mo, 3, 1.5 + 2.4*mo, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#fdfdfb";
+    for (const d of [-5, 3.2]) {
+      ctx.beginPath(); ctx.moveTo(mx + d, ny + 5);
+      ctx.lineTo(mx + d + 1.8, ny + 5);
+      ctx.lineTo(mx + d + .9, ny + 8.6); ctx.closePath(); ctx.fill();
+    }
+  }
+  [-1,1].forEach(d => { ctx.beginPath(); ctx.moveTo(hx+4+nx, ny+4.2);
+    ctx.quadraticCurveTo(hx+4+nx+d*2.4, ny+5.6, hx+4+nx+d*4.6, ny+4.2); ctx.stroke(); });
+  if (q.tongue > .5) {
+    ctx.fillStyle = "#e88b9b"; ctx.beginPath();
+    ctx.ellipse(hx+5.5+nx, ny+7.5, 2.6, 3.6, .2, 0, Math.PI*2); ctx.fill();
+  }
+  // усы: ближняя и дальняя сторона морды плюс пара назад по щеке
+  const wBase = hex2rgb(CAT.base)[0] < 120 ? "rgba(246,246,244," : "rgba(98,98,96,";
+  ctx.lineCap = "round";
+  for (let side = 0; side < 2; side++) {
+    const near = side === 1;
+    ctx.strokeStyle = wBase + (near ? ".9)" : ".3)");
+    ctx.lineWidth = near ? 1.2 : .8;
+    // обе стороны одинаковые; дальняя лишь смещена выше и бледнее
+    const bx0 = hx + 6 + nx - (near ? 0 : 1.6), by0 = ny + 1.4 - (near ? 0 : 1.8);
+    const len = 18, up = near ? 5 : 3;
+    for (let i=0;i<3;i++){
+      const y0 = by0 + i*2.3;
+      ctx.beginPath(); ctx.moveTo(bx0, y0);
+      ctx.quadraticCurveTo(bx0 + len*.55, y0 + (i-1)*1.2 + q.whisk*.6,
+                           bx0 + len, y0 - up + i*3.6 + q.whisk*1.5);
+      ctx.stroke();
+    }
+  }
+  // назад по щеке — зеркальный веер той же длины, толщины и яркости, чтобы стороны были равными
+  ctx.strokeStyle = wBase + ".9)"; ctx.lineWidth = 1.2;
+  for (let i=0;i<3;i++){
+    const y0 = ny + 1.4 + i*2.3;
+    ctx.beginPath(); ctx.moveTo(hx + 1 + nx, y0);
+    ctx.quadraticCurveTo(hx + 1 + nx - 18*.55, y0 + (i-1)*1.2 - q.whisk*.6,
+                         hx + 1 + nx - 18, y0 - 5 + i*3.6 - q.whisk*1.5);
+    ctx.stroke();
+  }
+  // ровно одна бровь над каждым глазом
+  ctx.lineWidth = 1.2;
+  for (let side = 0; side < 2; side++) {
+    const near = side === 1;
+    const ex = near ? hx + 7.5 : hx - 6.5;
+    ctx.strokeStyle = wBase + (near ? ".55)" : ".34)");
+    const y0 = hy - r*.5;
+    ctx.beginPath(); ctx.moveTo(ex - 1.5, y0);
+    ctx.quadraticCurveTo(ex + 3.5, y0 - 3.4 + q.whisk*.5,
+                         ex + 7, y0 - 4.8 + q.whisk*.8);
+    ctx.stroke();
+  }
+  if (CAT.extras.includes("collar") && CAT.collar) {
+    // ошейник дугой по шее, а не поперечной палкой
+    ctx.strokeStyle = CAT.collar; ctx.lineWidth = 4.2; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx - r*.50, hy + r*.74);
+    ctx.quadraticCurveTo(hx + r*.08, hy + r*.99, hx + r*.56, hy + r*.70);
+    ctx.stroke();
+    ctx.strokeStyle = shade(CAT.collar, .7); ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hx - r*.50, hy + r*.74);
+    ctx.quadraticCurveTo(hx + r*.08, hy + r*.99, hx + r*.56, hy + r*.70);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // висит на курсоре: передние лапы вытянуты вверх-вперёд и обхватывают его
+  if (q.hang > .5) {
+    const px = g.front + 25, py = g.tyF - 25;
+    for (let i=1;i>=0;i--){
+      const ox = i*7.5, oy = i*3.5;
+      ctx.strokeStyle = i ? shade(CAT.base,.88) : CAT.base;
+      ctx.lineWidth = 7.5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(g.front - 2, g.tyF + 10);
+      ctx.quadraticCurveTo(g.front + 14, g.tyF - 8, px + ox, py + oy);
+      ctx.stroke();
+      ctx.fillStyle = i ? shade(pawFill(),.9) : pawFill();
+      ctx.strokeStyle = INK; ctx.lineWidth = LW*.5;
+      ctx.beginPath(); ctx.ellipse(px + ox, py + oy, 6, 4.4, -.5, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // спит на спине: четыре лапки поджаты кверху
+  if (q.onBack > .5) {
+    const pf2 = pawFill();
+    const topAt = t => lerp(g.tyR, g.tyF, t);
+    const paws = [
+      [g.rear + 13, -1, .9],   // задняя дальняя
+      [g.rear + 24, 1, 1.0],   // задняя ближняя
+      [g.front - 17, -1, .85], // передняя дальняя
+      [g.front - 6, 1, .95],   // передняя ближняя
+    ];
+    paws.forEach(([x, dir, sc], i) => {
+      const t = clamp((x - g.rear)/(g.front - g.rear), 0, 1);
+      const y0 = topAt(t) + 3;
+      const kx = x + dir*4*sc, ky = y0 - 8.5*sc;      // колено
+      const px = x + dir*1.5*sc, py = y0 - 15*sc;     // лапка
+      ctx.lineCap = "round";
+      ctx.strokeStyle = INK; ctx.lineWidth = (8 + LW)*sc;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(kx, ky, px, py); ctx.stroke();
+      ctx.strokeStyle = i % 2 ? CAT.base : shade(CAT.base,.9); ctx.lineWidth = 8*sc;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(kx, ky, px, py); ctx.stroke();
+      ctx.fillStyle = i % 2 ? pf2 : shade(pf2,.9);
+      ctx.strokeStyle = INK; ctx.lineWidth = LW*.42;
+      ctx.beginPath(); ctx.ellipse(px, py - 1, 5.4*sc, 4.4*sc, dir*.25, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+    });
+  }
+
+  // лапа, которой кот трогает иконку — поверх головы, иначе её закрывает морда
+  if (cat.state === "paw_icon" && q.paw > .05) {
+    // лапа вынесена вперёд на постоянную длину, а вверх-вниз ходит по дуге
+    const px = g.front + 20 + 28*q.paw, py = g.byF - 7 - 34*q.pawUp;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = INK; ctx.lineWidth = 9 + LW;
+    ctx.beginPath(); ctx.moveTo(g.front - 4, g.byF - 4); ctx.lineTo(px, py); ctx.stroke();
+    ctx.strokeStyle = CAT.base; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(g.front - 4, g.byF - 4); ctx.lineTo(px, py); ctx.stroke();
+    ctx.fillStyle = pawFill(); ctx.strokeStyle = INK; ctx.lineWidth = LW*.45;
+    ctx.beginPath(); ctx.ellipse(px, py - 1, 6, 4.4, -.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    if (q.pawUp < .18) {                       // штрихи — только в момент касания
+      ctx.strokeStyle = shade(CAT.base,.5); ctx.lineWidth = LW*.5;
+      for (let i=0;i<2;i++){
+        ctx.beginPath(); ctx.moveTo(px + 9 + i*5, py - 6 - i*4);
+        ctx.lineTo(px + 15 + i*5, py - 9 - i*4); ctx.stroke();
+      }
+    }
+  }
+
+  // лапа при умывании — поверх головы, у самой морды
+  if (cat.state === "groom" && q.paw > .05) {
+    const tipX = hx + r*.30, tipY = hy + r*.66 + (1-q.paw)*7;
+    ctx.strokeStyle = CAT.base; ctx.lineWidth = 8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(g.front-2, g.byF-8);
+    ctx.quadraticCurveTo(g.front+18, g.byF-26, tipX, tipY); ctx.stroke();
+    ctx.fillStyle = pawFill(); ctx.strokeStyle = INK; ctx.lineWidth = LW*.5;
+    ctx.beginPath(); ctx.ellipse(tipX, tipY, 6, 4.4, .3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  }
+
+  // складки кожи у бесшёрстного кота
+  if (CAT.hairless) {
+    ctx.strokeStyle = shade(CAT.base, .72); ctx.lineWidth = LW*.32; ctx.lineCap = "round";
+    for (let i=0;i<3;i++){
+      const y = g.tyF + 4 + i*4;
+      ctx.beginPath(); ctx.moveTo(g.front - 14 - i*2, y);
+      ctx.quadraticCurveTo(g.front - 6, y + 2.5, g.front + 2, y + .5); ctx.stroke();
+    }
+    for (let i=0;i<2;i++){
+      const x = g.rear + 16 + i*9;
+      ctx.beginPath(); ctx.moveTo(x, lerp(g.tyR, g.tyF, .35) + 5 + i);
+      ctx.quadraticCurveTo(x + 4, g.byR - g.height*.45, x + 1, g.byR - g.height*.2);
+      ctx.stroke();
+    }
+  }
+
+  // шерсть дыбом
+  if (q.fluff > .05) {
+    ctx.fillStyle = CAT.base; ctx.strokeStyle = shade(CAT.base,.6); ctx.lineWidth = 1;
+    for (let i=0;i<10;i++){
+      const t = i/9, x = lerp(g.rear-2, g.front-4, t);
+      const y = lerp(g.tyR, g.tyF, t) - g.arch*9*Math.sin(t*Math.PI) - 1;
+      const h = (5 + 7*q.fluff*(.55+.45*Math.sin(t*Math.PI))) * (CAT.hairless ? .3 : 1);
+      ctx.beginPath(); ctx.moveTo(x-3,y); ctx.lineTo(x+(1-t)*2, y-h); ctx.lineTo(x+3,y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // пузырь речи
+  if (cat.bubble) {
+    const fade = clamp(cat.bubbleT/.5, 0, 1), rise = (1.7 - cat.bubbleT)*10;
+    ctx.save(); ctx.globalAlpha = fade;
+    ctx.font = "600 30px -apple-system, Segoe UI, sans-serif"; ctx.textAlign = "center";
+    const w = ctx.measureText(cat.bubble).width + 34;
+    const bx = clamp(cat.x + 34*k*fSign, w/2 + 10, W - w/2 - 10);
+    const by = cat.y + (g.tyF - 46)*k + q.dy*k - rise;
+    ctx.fillStyle = "#fdfcf8"; ctx.strokeStyle = "rgba(0,0,0,.18)"; ctx.lineWidth = 2;
+    roundRect(bx-w/2, by-26, w, 46, 14); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx-12, by+18); ctx.lineTo(bx-6, by+34); ctx.lineTo(bx+4, by+18);
+    ctx.closePath(); ctx.fillStyle = "#fdfcf8"; ctx.fill();
+    ctx.fillStyle = "#26242a"; ctx.fillText(cat.bubble, bx, by+6);
+    ctx.restore();
+  }
+}
+
+/* ---------- память питомца (localStorage браузера; в другом браузере кот начнёт заново) ---------- */
+const SAVE_KEY = "catpet:" + CAT.name + ":" + CAT.base;
+function loadState(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch (e) { return null; }
+}
+function saveState(){
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      x: Math.round(cat.x), y: Math.round(cat.y), facing: cat.facing, sex: CAT.sex,
+      state: cat.state, pets: cat.pets || 0, seen: Date.now()
+    }));
+  } catch (e) {}
+}
+function restoreOrStart(){
+  const sv = loadState();
+  if (!sv || typeof sv !== "object") { enter("walk"); return; }
+  if (sv.sex === "male" || sv.sex === "female") { CAT.sex = sv.sex; refreshSexBtn(); }
+  if (Number.isFinite(sv.x)) cat.x = clamp(sv.x, 20, W-20);
+  if (Number.isFinite(sv.y)) cat.y = clamp(sv.y, 100, FLOOR);
+  if (sv.facing === 1 || sv.facing === -1) { cat.facing = sv.facing; cat.faceCur = sv.facing; }
+  cat.pets = Number.isFinite(sv.pets) ? sv.pets : 0;
+  const awayMin = Number.isFinite(sv.seen) ? (Date.now() - sv.seen) / 60000 : 0;
+  if (awayMin > 20) {
+    // хозяина долго не было: кот спал там, где его оставили, просыпается и здоровается
+    cat.y = FLOOR; enter("sleep"); cat.dur = rnd(2.5, 4.5); cat.wakeGreet = true;
+  } else if (["loaf","sleep","sit","sit_on_icon"].includes(sv.state) && sv.state !== "sit_on_icon") {
+    enter(sv.state);
+  } else enter("idle");
+}
+let saveCd = 4;
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveState(); });
+window.addEventListener("pagehide", saveState);
+
+/* ---------- кадр ---------- */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.05, (now-last)/1000); last = now;
+  update(dt);
+  saveCd -= dt; if (saveCd <= 0) { saveCd = 4; saveState(); }
+  const q = pose();
+  ctx.clearRect(0,0,W,H);
+  drawDesktop();
+  const behind = cat.state === "hidden" && cat.hideBehind;
+  if (behind) { drawCat(q); drawWindow(); }
+  else { drawWindow(); drawCat(q); }
+  drawBowls();
+  requestAnimationFrame(frame);
+}
+refreshBowlButtons();
+restoreOrStart();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

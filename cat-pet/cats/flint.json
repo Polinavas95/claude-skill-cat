@@ -1,0 +1,37 @@
+{
+  "name": "Флинт",
+  "sex": "male",
+  "language": "ru",
+  "scale": 1.0,
+  "speed_scale": 1.1,
+  "appearance": {
+    "base_color": "#e0883e",
+    "pattern": "tabby",
+    "pattern_color": "#a8551c",
+    "belly_color": "#7a4a2a",
+    "eye_color": "#d9b23c",
+    "nose_color": "#d6807a",
+    "fur": "long",
+    "ear_style": "normal",
+    "tail": "short",
+    "build": "normal",
+    "face": "round",
+    "extras": ["pirate_hat"]
+  },
+  "personality": {
+    "energy": 0.85,
+    "curiosity": 0.7,
+    "boldness": 0.75,
+    "clinginess": 0.85,
+    "talkativeness": 0.6,
+    "loaf_bias": 0.2
+  },
+  "phrases": {
+    "meow": ["Мяу!", "Йо-хо!", "Мрря"],
+    "purr": ["Мур-р-р", "Мррр"],
+    "scared": ["Ш-ш-ш!"],
+    "annoyed": ["Арр.", "Тц"],
+    "sleep": ["z-z-z"],
+    "eat": ["Хрум", "Ням"]
+  }
+}

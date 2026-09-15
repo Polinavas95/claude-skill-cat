@@ -1,0 +1,16 @@
+{
+  "name": "cat-pet",
+  "version": "0.1.0",
+  "description": "Кот из cat-skill как питомец поверх рабочего стола (macOS)",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "build": "python3 build_pet_app.py",
+    "start": "electron .",
+    "pack": "electron-packager . CatPet --platform=darwin --arch=arm64 --out=dist --overwrite --app-bundle-id=local.catpet --ignore='^/dist' --ignore='^/cat-skill/references' && codesign --force --deep -s - dist/CatPet-darwin-arm64/CatPet.app"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.3.0"
+  }
+}
