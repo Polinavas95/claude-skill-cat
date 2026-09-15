@@ -122,6 +122,25 @@ ipcMain.on("over-cat", (_e, v) => {
 ipcMain.on("state", (_e, text) => { if (tray) tray.setToolTip(text); });
 ipcMain.on("menu", () => buildMenu().popup({ window: win }));
 
+async function pickSpecFile() {
+  // приложение без Dock и с нефокусируемым окном: без явного фокуса диалог уходит под другие окна
+  if (app.dock) await app.dock.show();
+  app.focus({ steal: true });
+  try {
+    const r = await dialog.showOpenDialog({
+      title: "Выбрать cat.json", defaultPath: path.join(__dirname, "cats"),
+      properties: ["openFile"], filters: [{ name: "cat.json", extensions: ["json"] }]
+    });
+    if (r.canceled || !r.filePaths[0]) return;
+    try { JSON.parse(fs.readFileSync(r.filePaths[0], "utf-8")); }
+    catch (e) { dialog.showErrorBox("Это не cat.json", e.message); return; }
+    fs.copyFileSync(r.filePaths[0], SPEC_PATH);
+    reloadCat();
+  } finally {
+    if (app.dock) app.dock.hide();
+  }
+}
+
 function buildMenu() {
   const act = (label, state) => ({ label, click: () => send("enter", state) });
   return Menu.buildFromTemplate([
@@ -140,10 +159,7 @@ function buildMenu() {
     { label: "Поставить воду", click: () => send("bowl", "water") },
     { type: "separator" },
     { label: "Изменить кота (cat.json)…", click: () => shell.openPath(SPEC_PATH) },
-    { label: "Выбрать другой cat.json…", click: async () => {
-        const r = await dialog.showOpenDialog({ properties: ["openFile"], filters: [{ name: "cat.json", extensions: ["json"] }] });
-        if (r.canceled || !r.filePaths[0]) return;
-        fs.copyFileSync(r.filePaths[0], SPEC_PATH); reloadCat(); } },
+    { label: "Выбрать другой cat.json…", click: () => pickSpecFile() },
     { label: "Сменить пол", click: () => send("toggle-sex", null) },
     { label: "Перезагрузить кота", click: () => reloadCat() },
     { type: "separator" },
