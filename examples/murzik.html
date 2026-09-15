@@ -55,6 +55,7 @@
     <button data-state="berserk">Берсерк</button>
     <button data-bowl="food">Поставить корм</button>
     <button data-bowl="water">Поставить воду</button>
+    <button id="toyBtn">Дать мышку</button>
     <button id="sexBtn">Сделать кошкой</button>
   </div>
   <div class="state" id="statebar"></div>
@@ -179,7 +180,8 @@ const STATE_RU = {idle:"стоит",walk:"гуляет",sit:"сидит",loaf:"�
   startle:"испугался",calm_down:"успокаивается",unimpressed:"не впечатлён",petted:"его гладят",
   dodge:"уворачивается",approach_bowl:"идёт к миске",eat:"ест",drink:"пьёт",
   fall:"срывается с курсора",sniff:"принюхивается",purring:"мурчит под рукой",
-  berserk:"берсерк!",catch_breath:"отдыхивается"};
+  berserk:"берсерк!",catch_breath:"отдыхивается",approach_toy:"идёт к мышке",stalk:"крадётся",
+  bat:"играет с мышкой",chase_toy:"гонится за мышкой"};
 
 let mouse = {x: W*0.7, y: H*0.5, inside: false}, mousePrev = null, mouseSpeed = 0;
 cv.addEventListener("mousemove", e => {
@@ -241,6 +243,60 @@ function nearestBowl(){
   return free.reduce((a,b) => Math.abs(b.x-cat.x) < Math.abs(a.x-cat.x) ? b : a);
 }
 
+/* ---------- игрушка-мышка ---------- */
+let toy = null;
+const toyBtn = document.getElementById("toyBtn");
+function refreshToyButton(){ if (toyBtn) toyBtn.textContent = toy ? "Убрать мышку" : "Дать мышку"; }
+function spawnToy(){
+  if (toy) return;
+  toy = {x: rnd(W*.25, W*.8), y: FLOOR + 4, vx: 0, dir: 1, life: 80, hit: 0};
+  refreshToyButton();
+}
+function removeToy(){
+  toy = null;
+  if (["approach_toy","stalk","bat","chase_toy"].includes(cat.state)) enter("idle");
+  refreshToyButton();
+}
+function kickToy(dir){
+  if (!toy) return;
+  toy.vx = dir*rnd(240, 520)*CAT.scale/2.6; toy.dir = dir; toy.hit = 1;
+  toy.life = Math.max(toy.life, 25);
+}
+if (toyBtn) toyBtn.addEventListener("click", () => toy ? removeToy() : spawnToy());
+function updateToy(dt){
+  if (!toy) return;
+  toy.life -= dt; toy.hit = Math.max(0, toy.hit - dt*1.5);
+  toy.x += toy.vx*dt; toy.vx *= Math.max(0, 1 - 2.4*dt);
+  if (Math.abs(toy.vx) < 4) toy.vx = 0;
+  if (toy.x < 40) { toy.x = 40; toy.vx = Math.abs(toy.vx)*.5; toy.dir = 1; }
+  if (toy.x > W-40) { toy.x = W-40; toy.vx = -Math.abs(toy.vx)*.5; toy.dir = -1; }
+  if (toy.life <= 0) removeToy();
+}
+function drawToy(){
+  if (!toy) return;
+  const k = CAT.scale/2.6*1.3, now = performance.now();
+  ctx.save(); ctx.globalAlpha = clamp(toy.life/3, 0, 1);
+  ctx.translate(toy.x, toy.y); ctx.scale(k*toy.dir, k);
+  ctx.rotate(toy.hit*Math.sin(now/40)*.12);
+  ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(0, 3, 30, 5, 0, 0, Math.PI*2); ctx.fill();
+  // хвост: дрожит, когда мышку только что шлёпнули или она едет
+  const sw = Math.sin(now/110)*6*Math.min(1, toy.hit + (Math.abs(toy.vx) > 10 ? 1 : 0));
+  ctx.strokeStyle = "#c98a8a"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-22, -6); ctx.quadraticCurveTo(-45, -20 + sw, -60, -4 + sw*.5); ctx.stroke();
+  // тело
+  ctx.fillStyle = "#a0a0a8"; ctx.strokeStyle = "#3a3a44"; ctx.lineWidth = 2.4; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(-24, -4); ctx.quadraticCurveTo(-26, -24, 0, -24); ctx.quadraticCurveTo(22, -24, 30, -6);
+  ctx.quadraticCurveTo(32, 0, 26, 0); ctx.lineTo(-20, 0); ctx.quadraticCurveTo(-26, 0, -24, -4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#c9b9c0"; ctx.beginPath(); ctx.arc(6, -22, 7, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#e8b8c4"; ctx.beginPath(); ctx.arc(6, -22, 3.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#1e1c22"; ctx.beginPath(); ctx.arc(17, -13, 2.4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#e88b9b"; ctx.beginPath(); ctx.arc(30, -7, 3, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = "rgba(40,40,50,.6)"; ctx.lineWidth = 1;
+  [-3, 0, 3].forEach(d => { ctx.beginPath(); ctx.moveTo(26, -7 + d*.3); ctx.lineTo(40, -9 + d*3); ctx.stroke(); });
+  ctx.restore();
+}
+
 /* ---------- состояние кота ---------- */
 const cat = {
   x: W*0.3, y: FLOOR, facing: 1, faceCur: 1,
@@ -254,10 +310,10 @@ const cat = {
   speedMul: 1, dash: null, offTimer: 0,
   stroke: 0, strokeCd: 0, bowlSig: "",
   lookX: 0, lookY: 0, lookTarget: {x: 0, y: 0}, lookCd: 2, flickCd: 5,
-  pets: 0, wakeGreet: false
+  pets: 0, wakeGreet: false, toyCd: 30, playRounds: 0, playMax: 3, swipes: 0
 };
 const BIG = new Set(["walk","loaf","sleep","sit","approach_icon","go_hide","chase_cursor",
-  "watch_cursor","groom","stretch","approach_bowl"]);
+  "watch_cursor","groom","stretch","approach_bowl","approach_toy"]);
 
 function say(kind, chance=1){
   if (Math.random() > chance) return;
@@ -277,7 +333,8 @@ function startJump(to, after){
 }
 
 const GROUND = new Set(["walk","idle","sit","loaf","sleep","groom","stretch","sniff","purring","petted",
-  "unimpressed","dodge","watch_cursor","chase_cursor","approach_icon","approach_bowl","go_hide","berserk"]);
+  "unimpressed","dodge","watch_cursor","chase_cursor","approach_icon","approach_bowl","go_hide","berserk",
+  "approach_toy","stalk","chase_toy"]);
 function enter(s){
   // с иконки на землю только прыжком: испуг или поглаживание наверху не должны ронять кота по воздуху
   if (GROUND.has(s) && cat.y < FLOOR - 300 && !cat.jump) s = "jump_down";
@@ -285,6 +342,8 @@ function enter(s){
   const talk = P.talkativeness*2;
   // каждый переход — своя скорость: то плетётся, то идёт бодро
   if (["walk","approach_icon","approach_bowl","go_hide"].includes(s)) cat.speedMul = rnd(.5, 1.25);
+  if (s === "approach_toy") cat.speedMul = rnd(.8, 1.1);
+  if (s === "chase_toy") cat.speedMul = rnd(1.3, 1.7);
   if (s === "chase_cursor") cat.speedMul = rnd(.9, 1.35);
   switch(s){
     case "idle": cat.dur = rnd(1,3); break;
@@ -344,6 +403,23 @@ function enter(s){
       cat.dur = 25; break;
     }
     case "eat": cat.dur = rnd(4,7); say("eat", .5); break;
+    case "approach_toy": {
+      if (!toy) { enter("walk"); return; }
+      if (cat.playRounds === 0) cat.playMax = 2 + Math.floor(Math.random()*3);
+      const dir = cat.x < toy.x ? 1 : -1;
+      cat.target = {x: toy.x - 120*CAT.scale*dir, y: FLOOR}; cat.dur = 25; break;
+    }
+    case "stalk": cat.dur = rnd(1.2, 2.2); break;
+    case "pounce": {
+      // прыжок на мышку: приземляется так, чтобы лапа доставала до неё
+      if (!toy) { enter("idle"); return; }
+      const dir = cat.x < toy.x ? 1 : -1;
+      startJump({x: clamp(toy.x - 60*CAT.scale*dir, 40, W-40), y: FLOOR}, "bat");
+      cat.jump.arc = Math.min(60, cat.jump.arc*1.6);
+      cat.state = "jump_up"; say("meow", .2*talk); break;
+    }
+    case "bat": cat.dur = rnd(1.8, 3.6); cat.swipes = 0; break;
+    case "chase_toy": cat.dur = 8; break;
     case "drink": cat.dur = rnd(3.5,6); break;
     default: cat.dur = 2;
   }
@@ -367,6 +443,7 @@ function chooseNext(){
   // пока его гладят, кот не убегает ловить курсор
   if (cat.grabCd <= 0 && cat.stroke < .5) o.chase_cursor = .05 + P.clinginess + Math.min(.2, (cat.pets || 0)*.004);
   if (nearestBowl()) o.approach_bowl = 1.6 + P.curiosity*.8;
+  if (toy && cat.playRounds === 0) o.approach_toy = 1.2 + P.energy*1.2 + P.curiosity*.5;
   if (cat.prevBig && cat.prevBig !== "idle") delete o[cat.prevBig];
   const keys = Object.keys(o), total = keys.reduce((s,k)=>s+o[k],0);
   let roll = Math.random()*total;
@@ -423,6 +500,9 @@ function update(dt){
     cat.bowlCd = rnd(35, 70);
     if (bowls.length < 1 && Math.random() < .6) spawnBowl(Math.random() < .5 ? "food" : "water");
   }
+  cat.toyCd -= dt;
+  if (cat.toyCd <= 0) { cat.toyCd = rnd(70, 140); if (!toy && Math.random() < .55) spawnToy(); }
+  updateToy(dt);
   for (let i = bowls.length-1; i >= 0; i--) {
     bowls[i].life -= dt; bowls[i].ripple = Math.max(0, bowls[i].ripple - dt*1.5);
     if (bowls[i].life <= 0 || bowls[i].level <= .05) {
@@ -456,7 +536,7 @@ function update(dt){
   // гладить можно почти всегда — кот останавливается и начинает мурчать
   const NO_PET = ["hidden","peek","eat","drink","approach_bowl","chase_cursor","purring",
                   "sleep","startle","calm_down","jump_up","jump_down","crouch","land",
-                  "grab_cursor","fall","dodge"];
+                  "grab_cursor","fall","dodge","stalk","bat","chase_toy","approach_toy"];
   if (cat.stroke > 1.1 && cat.strokeCd <= 0 && !NO_PET.includes(cat.state)) {
     cat.strokeCd = rnd(5,9);
     // мурчит не всегда: иногда только дёрнет ухом
@@ -483,7 +563,7 @@ function update(dt){
     const p = clamp(cat.t/cat.dur, 0, 1), e = easeInOut(p);
     cat.x = lerp(cat.jump.from.x, cat.jump.to.x, e);
     cat.y = lerp(cat.jump.from.y, cat.jump.to.y, e);
-    if (p >= 1) { const nxt = cat.after === "sit_on_icon" ? "sit_on_icon" : "land"; cat.jump = null; enter(nxt); }
+    if (p >= 1) { const nxt = cat.after || "land"; cat.jump = null; enter(nxt); }
   }
   else if (s === "land") { if (done) enter(chooseNext()); }
   else if (s === "sit_on_icon") { if (done) enter("jump_down"); }
@@ -529,6 +609,33 @@ function update(dt){
       if (done) { say(s === "eat" ? "eat" : "purr", .4); enter(chooseNext()); }
     }
   }
+  else if (s === "approach_toy") {
+    if (!toy) enter("idle");
+    else if (stepTo(cat.target, speed()) || done) { cat.facing = toy.x > cat.x ? 1 : -1; enter("stalk"); }
+  }
+  else if (s === "stalk") { if (!toy) enter("idle"); else if (done) enter("pounce"); }
+  else if (s === "bat") {
+    if (!toy) enter("idle");
+    else {
+      cat.facing = toy.x >= cat.x ? 1 : -1;
+      const cyc = Math.floor(cat.t/.9), ph = (cat.t/.9) % 1;
+      if (ph > .78 && ph < .9 && cat.swipes <= cyc) { cat.swipes = cyc + 1; kickToy(cat.facing); }
+      if (done) {
+        cat.playRounds += 1;
+        if (cat.playRounds >= cat.playMax) { cat.playRounds = 0; toy.life = Math.min(toy.life, 12); enter(chooseNext()); }
+        else enter("chase_toy");
+      }
+    }
+  }
+  else if (s === "chase_toy") {
+    if (!toy) enter("idle");
+    else {
+      const dir = cat.x < toy.x ? 1 : -1;
+      const arrived = stepTo({x: clamp(toy.x - 120*CAT.scale*dir, 40, W-40), y: FLOOR}, speed());
+      if (arrived && Math.abs(toy.vx) < 30) { cat.facing = dir; enter("stalk"); }
+      else if (done) { cat.playRounds = 0; enter(chooseNext()); }
+    }
+  }
   else if (s === "startle") { if (done) enter("calm_down"); }
   else if (s === "calm_down") { if (done) enter(cat.calmReturn); }
   else if (s === "berserk") {
@@ -572,7 +679,7 @@ function update(dt){
   const sig = bowls.map(b => b.kind).sort().join(",");
   if (sig !== cat.bowlSig) { cat.bowlSig = sig; refreshBowlButtons(); }
   document.getElementById("statebar").textContent =
-    "сейчас: " + (STATE_RU[cat.state] || cat.state) + (bowls.length ? " · на полу миска" : "");
+    "сейчас: " + (STATE_RU[cat.state] || cat.state) + (bowls.length ? " · на полу миска" : "") + (toy ? " · на полу мышка" : "");
 }
 
 /* ---------- поза ---------- */
@@ -586,7 +693,7 @@ function pose(){
     tailTip:Math.sin(now/520)*.1};
   const s = cat.state, t = cat.t;
 
-  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl"].includes(s)) {
+  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl","approach_toy","chase_toy"].includes(s)) {
     q.legPhase = cat.walkPhase;
     q.tailAngle = .4 + Math.sin(cat.walkPhase*.16)*.18;
   }
@@ -628,6 +735,20 @@ function pose(){
                        : (ph < .8 ? 1 - easeInOut((ph - .5)/.3) : 0);
     q.paw = .8; q.pawUp = up; q.sit = .3; q.pupil = .7;
     q.headDy = 1 + (1-up)*2;
+  }
+  else if (s === "stalk") {
+    // крадётся: припал к земле, зрачки во весь глаз, виляет задом, хвост дёргается
+    q.crouch = .85; q.pupil = 1; q.eyeOpen = 1; q.headDy = 5; q.headDx = 3; q.earDroop = .1;
+    q.tailAngle = .35; q.tailWhip = Math.sin(t*16)*.45;
+    q.lean = Math.sin(t*22)*2.2*(CAT.scale/2.6);
+  }
+  else if (s === "bat") {
+    // шлёпает мышку: замах как по иконке, но ниже, к полу
+    const ph = (t/.9) % 1;
+    const up = ph < .5 ? easeInOut(ph/.5) : (ph < .8 ? 1 - easeInOut((ph - .5)/.3) : 0);
+    q.paw = .8; q.pawUp = up*.7; q.sit = .25; q.pupil = .9;
+    q.headDy = 6 + (1-up)*2; q.headDx = 2;
+    q.tailAngle = .5 + Math.sin(t*5)*.2;
   }
   else if (s === "crouch") {
     const p = clamp(t/cat.dur,0,1);
@@ -744,7 +865,7 @@ function pose(){
   if (["idle","sit","loaf","sit_on_icon","unimpressed","sniff","stretch","watch_cursor"].includes(s)) {
     q.headDx += cat.lookX*.8; q.headDy += cat.lookY*.8;
   }
-  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl"].includes(s)) {
+  if (["walk","approach_icon","go_hide","chase_cursor","approach_bowl","approach_toy","chase_toy"].includes(s)) {
     q.headDy += Math.sin(cat.walkPhase*.5)*1.3;
     q.dy += Math.sin(cat.walkPhase)*.9;
     q.headDx += Math.sin(cat.walkPhase*.5 + 1)*.8;
@@ -1099,9 +1220,9 @@ function drawCat(q){
     const sdF = q.stretchDown;
     drawLeg(g.front-19, g.byF, frontOff(0)*(1-sdF) + q.air*7 + sdF*40, liftOf(0, true)*(1-sdF));
     // при умывании одну переднюю лапу кот держит у морды — на земле остаётся одна
-    if (!["groom","paw_icon"].includes(cat.state))
+    if (!["groom","paw_icon","bat"].includes(cat.state))
       drawLeg(g.front-9, g.byF, frontOff(1)*(1-sdF) + q.air*11 + sdF*46, liftOf(1, true)*(1-sdF));
-    if (q.paw > .05 && !["groom","paw_icon"].includes(cat.state)) {
+    if (q.paw > .05 && !["groom","paw_icon","bat"].includes(cat.state)) {
       const px = g.front + 4 + 20*q.paw, py = g.byF - 6 - 18*q.paw;
       ctx.strokeStyle = CAT.base; ctx.lineWidth = 8; ctx.lineCap = "round";
       ctx.beginPath(); ctx.moveTo(g.front-4, g.byF-2); ctx.lineTo(px, py); ctx.stroke();
@@ -1466,7 +1587,7 @@ function drawCat(q){
   }
 
   // лапа, которой кот трогает иконку — поверх головы, иначе её закрывает морда
-  if (cat.state === "paw_icon" && q.paw > .05) {
+  if (["paw_icon","bat"].includes(cat.state) && q.paw > .05) {
     // лапа вынесена вперёд на постоянную длину, а вверх-вниз ходит по дуге
     const px = g.front + 20 + 28*q.paw, py = g.byF - 7 - 34*q.pawUp;
     ctx.lineCap = "round";
@@ -1476,7 +1597,7 @@ function drawCat(q){
     ctx.beginPath(); ctx.moveTo(g.front - 4, g.byF - 4); ctx.lineTo(px, py); ctx.stroke();
     ctx.fillStyle = pawFill(); ctx.strokeStyle = INK; ctx.lineWidth = LW*.45;
     ctx.beginPath(); ctx.ellipse(px, py - 1, 6, 4.4, -.3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    if (q.pawUp < .18) {                       // штрихи — только в момент касания
+    if (q.pawUp < .18 && cat.state === "paw_icon") {   // штрихи — только в момент касания иконки
       ctx.strokeStyle = shade(CAT.base,.5); ctx.lineWidth = LW*.5;
       for (let i=0;i<2;i++){
         ctx.beginPath(); ctx.moveTo(px + 9 + i*5, py - 6 - i*4);
@@ -1584,8 +1705,8 @@ function frame(now){
   ctx.clearRect(0,0,W,H);
   drawDesktop();
   const behind = cat.state === "hidden" && cat.hideBehind;
-  if (behind) { drawCat(q); drawWindow(); }
-  else { drawWindow(); drawCat(q); }
+  if (behind) { drawToy(); drawCat(q); drawWindow(); }
+  else { drawWindow(); drawToy(); drawCat(q); }
   drawBowls();
   requestAnimationFrame(frame);
 }

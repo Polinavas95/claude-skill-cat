@@ -81,6 +81,7 @@ cv.addEventListener("mouseleave", () => { mouse.inside = false; mouseSpeed = 0; 
 window.pet.onEnter(s => enter(s));
 cv.addEventListener("contextmenu", e => { e.preventDefault(); window.pet.menu(); });
 window.pet.onBowl(k => { if (!bowlOf(k)) spawnBowl(k); });
+window.pet.onToy(() => toy ? removeToy() : spawnToy());
 window.pet.onResize(() => location.reload());
 const catHit = () => mouse.inside &&
   Math.hypot(mouse.x - cat.x, mouse.y - (cat.y - 40*CAT.scale)) < 110*CAT.scale;
@@ -106,13 +107,14 @@ rep("""  const q = pose();
   ctx.clearRect(0,0,W,H);
   drawDesktop();
   const behind = cat.state === "hidden" && cat.hideBehind;
-  if (behind) { drawCat(q); drawWindow(); }
-  else { drawWindow(); drawCat(q); }
+  if (behind) { drawToy(); drawCat(q); drawWindow(); }
+  else { drawWindow(); drawToy(); drawCat(q); }
   drawBowls();
   requestAnimationFrame(frame);""",
 """  const q = pose();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0,0,W,H);
+  drawToy();
   drawCat(q);
   drawBowls();
   const over = catHit();

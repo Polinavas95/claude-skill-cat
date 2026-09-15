@@ -148,6 +148,7 @@ function buildMenu() {
     { type: "separator" },
     { label: "Поставить корм", click: () => send("bowl", "food") },
     { label: "Поставить воду", click: () => send("bowl", "water") },
+    { label: "Дать / убрать мышку", click: () => send("toy", null) },
     { type: "separator" },
     { label: "Изменить кота (cat.json)…", click: () => shell.openPath(SPEC_PATH) },
     { label: "Выбрать другой cat.json…", click: () => pickSpecFile() },
