@@ -26,7 +26,7 @@
 **Claude Code** — как плагин из этого репозитория:
 
 ```
-/plugin marketplace add ВАШ-ЛОГИН/cat-skill
+/plugin marketplace add Polinavas95/claude-skill-cat
 /plugin install cat-skill
 ```
 
